@@ -108,12 +108,27 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
 
   const groupByCategory = (items) => {
     const groups = {};
+    const uncategorized = [];
     items.forEach(item => {
-      const cat = item.category || "";
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(item);
+      if (item.category) {
+        if (!groups[item.category]) groups[item.category] = [];
+        groups[item.category].push(item);
+      } else {
+        uncategorized.push(item);
+      }
     });
-    return groups;
+    return { groups, uncategorized };
+  };
+
+  const resetForNextOrder = () => {
+    setFoodSelections({});
+    setDrinkSelections({});
+    setDrinkOptions({});
+    setNote("");
+    setUserName("");
+    setExistingOrderId(null);
+    setFinalOrder(null);
+    setStep("name");
   };
 
   const submit = async () => {
@@ -145,32 +160,36 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   if (session.status === "closed") return (
     <div className="page">
       <div className="top-bar"><div className="logo-mark">🍱</div><h1>午餐快點</h1></div>
-      <div className="empty"><div className="empty-icon">🔒</div><p style={{ fontWeight: 700 }}>此訂單已結單</p></div>
+      <div className="empty"><div className="empty-icon">🔒</div><p style={{ fontWeight: 700 }}>此訂單已結單</p><p style={{ color: "var(--text2)", marginTop: 6, fontSize: 14 }}>發起人已完成收單</p></div>
     </div>
   );
 
-  // ── DONE ─────────────────────────────────────────────────────────
+  // ── DONE 結束畫面 ────────────────────────────────────────────────
   if (step === "done" && finalOrder) {
-    const shareLink = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
     return (
       <div className="page">
         <div className="top-bar"><div className="logo-mark">🍱</div><h1>午餐快點</h1></div>
 
-        <div style={{ textAlign: "center", padding: "28px 0 20px" }}>
-          <div style={{ fontSize: 64, marginBottom: 12 }}>✅</div>
+        <div style={{ textAlign: "center", padding: "24px 0 16px" }}>
+          <div style={{ fontSize: 60, marginBottom: 10 }}>✅</div>
           <h2 style={{ fontSize: 22, fontWeight: 800 }}>點餐成功！</h2>
-          <p style={{ color: "var(--text2)", fontSize: 14, marginTop: 6 }}>{finalOrder.userName}，記得向發起人繳費喔</p>
+          <p style={{ color: "var(--text2)", fontSize: 14, marginTop: 6 }}>
+            {finalOrder.userName}，記得向發起人繳費喔 💰
+          </p>
         </div>
 
+        {/* 訂單明細 */}
         <div className="card">
-          <div className="card-title">📋 訂單明細</div>
+          <div className="card-title">📋 我的訂單明細</div>
 
           {finalOrder.foodItems.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 8 }}>🍱 {session.restaurantName}</div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 8, textTransform: "uppercase" }}>
+                🍱 {session.restaurantName}
+              </div>
               {finalOrder.foodItems.map((item, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
-                  <span>{item.name} <span style={{ color: "var(--text3)" }}>× {item.qty}</span></span>
+                  <span style={{ flex: 1 }}>{item.name} <span style={{ color: "var(--text3)" }}>× {item.qty}</span></span>
                   <span style={{ fontWeight: 600 }}>$ {item.price * item.qty}</span>
                 </div>
               ))}
@@ -178,15 +197,19 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
           )}
 
           {finalOrder.drinkItems.length > 0 && (
-            <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--purple)", marginBottom: 8 }}>🧋 {session.drinkName}</div>
+            <div style={{ marginTop: finalOrder.foodItems.length > 0 ? 10 : 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--purple)", marginBottom: 8, textTransform: "uppercase" }}>
+                🧋 {session.drinkName}
+              </div>
               {finalOrder.drinkItems.map((item, i) => (
                 <div key={i} style={{ padding: "7px 0", borderBottom: "1px solid var(--bg2)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-                    <span>{item.name} <span style={{ color: "var(--text3)" }}>× {item.qty}</span></span>
+                    <span style={{ flex: 1 }}>{item.name} <span style={{ color: "var(--text3)" }}>× {item.qty}</span></span>
                     <span style={{ fontWeight: 600, color: "var(--purple)" }}>$ {item.price * item.qty}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>🍬 {item.sugar}　🧊 {item.ice}</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>
+                    🍬 {item.sugar}　🧊 {item.ice}
+                  </div>
                 </div>
               ))}
             </div>
@@ -204,21 +227,28 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
           </div>
         </div>
 
+        {/* 繳費提示 */}
         <div className="card" style={{ background: "var(--amber-bg)", border: "1.5px solid #F0C060", textAlign: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--amber)" }}>💰 請向發起人繳交 $ {finalOrder.total}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--amber)" }}>
+            💰 請向發起人繳交 $ {finalOrder.total}
+          </div>
         </div>
 
-        <button className="btn btn-outline" onClick={() => navigate("myorder", sessionId, userId || localStorage.getItem("lunch_uid"))}>
-          📋 查詢 / 修改我的訂單
-        </button>
-
-        <div style={{ marginTop: 16, padding: "16px", background: "var(--bg2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
-          <p style={{ fontSize: 13, color: "var(--text2)", marginBottom: 10 }}>需要幫別人點餐，或重新點餐？</p>
-          <button className="btn btn-secondary btn-sm"
-            onClick={() => { navigator.clipboard.writeText(shareLink); showToast("🔗 連結已複製！"); }}>
-            複製點餐連結
+        {/* 繼續點下一份 */}
+        <div className="card" style={{ background: "var(--bg2)", textAlign: "center" }}>
+          <p style={{ fontSize: 14, color: "var(--text2)", marginBottom: 14 }}>
+            若想繼續點下一份餐，請按下方按鈕
+          </p>
+          <button className="btn btn-primary" onClick={resetForNextOrder}>
+            🍽️ 繼續點下一份
           </button>
         </div>
+
+        {/* 查詢修改 */}
+        <button className="btn btn-secondary" style={{ marginTop: 4 }}
+          onClick={() => navigate("myorder", sessionId, userId || localStorage.getItem("lunch_uid"))}>
+          📋 查詢 / 修改我的訂單
+        </button>
 
         <Toast msg={toast} />
       </div>
@@ -255,9 +285,25 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
 
   // ── FOOD ─────────────────────────────────────────────────────────
   if (step === "food") {
-    const groups = groupByCategory(session.menuItems || []);
-    const cats = Object.keys(groups);
-    const hasCats = cats.some(k => k !== "");
+    const { groups, uncategorized } = groupByCategory(session.menuItems || []);
+    const hasCats = Object.keys(groups).length > 0;
+
+    const MenuItemRow = ({ item }) => {
+      const qty = foodSelections[item.name] || 0;
+      return (
+        <div className={`menu-item ${qty > 0 ? "selected" : ""}`}>
+          <div className="menu-item-info">
+            <div className="menu-item-name">{item.name}</div>
+            <div className="menu-item-price">$ {item.price}</div>
+          </div>
+          <div className="qty-control">
+            <button onClick={() => setFood(item.name, -1)} disabled={qty === 0}>−</button>
+            <span className="qty-num">{qty}</span>
+            <button onClick={() => setFood(item.name, 1)}>+</button>
+          </div>
+        </div>
+      );
+    };
 
     return (
       <div className="page">
@@ -268,51 +314,35 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
         </div>
 
         {hasCats ? (
-          cats.map(cat => (
-            <div key={cat}>
-              {cat && (
+          <>
+            {Object.entries(groups).map(([cat, items]) => (
+              <div key={cat}>
                 <div style={{
                   background: "var(--accent)", color: "white",
-                  padding: "5px 14px", borderRadius: 6,
-                  fontSize: 13, fontWeight: 700,
-                  margin: "16px 0 8px", display: "inline-block"
+                  padding: "5px 12px", borderRadius: 6,
+                  fontSize: 12, fontWeight: 700,
+                  margin: "14px 0 8px", display: "inline-block"
                 }}>{cat}</div>
-              )}
-              {groups[cat].map((item, i) => {
-                const qty = foodSelections[item.name] || 0;
-                return (
-                  <div key={i} className={`menu-item ${qty > 0 ? "selected" : ""}`}>
-                    <div className="menu-item-info">
-                      <div className="menu-item-name">{item.name}</div>
-                      <div className="menu-item-price">$ {item.price}</div>
-                    </div>
-                    <div className="qty-control">
-                      <button onClick={() => setFood(item.name, -1)} disabled={qty === 0}>−</button>
-                      <span className="qty-num">{qty}</span>
-                      <button onClick={() => setFood(item.name, 1)}>+</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))
-        ) : (
-          (session.menuItems || []).map((item, i) => {
-            const qty = foodSelections[item.name] || 0;
-            return (
-              <div key={i} className={`menu-item ${qty > 0 ? "selected" : ""}`}>
-                <div className="menu-item-info">
-                  <div className="menu-item-name">{item.name}</div>
-                  <div className="menu-item-price">$ {item.price}</div>
-                </div>
-                <div className="qty-control">
-                  <button onClick={() => setFood(item.name, -1)} disabled={qty === 0}>−</button>
-                  <span className="qty-num">{qty}</span>
-                  <button onClick={() => setFood(item.name, 1)}>+</button>
-                </div>
+                {items.map((item, i) => <MenuItemRow key={i} item={item} />)}
               </div>
-            );
-          })
+            ))}
+            {uncategorized.length > 0 && (
+              <div>
+                <div style={{
+                  background: "var(--bg2)", color: "var(--text2)",
+                  padding: "5px 12px", borderRadius: 6,
+                  fontSize: 12, fontWeight: 700,
+                  margin: "14px 0 8px", display: "inline-block"
+                }}>其他</div>
+                {uncategorized.map((item, i) => <MenuItemRow key={i} item={item} />)}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="section-label">選擇餐點</p>
+            {(session.menuItems || []).map((item, i) => <MenuItemRow key={i} item={item} />)}
+          </>
         )}
 
         <div className="field" style={{ marginTop: 16 }}>
@@ -349,11 +379,11 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
               borderRadius: "var(--radius-sm)", padding: "14px", marginBottom: 10
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 15 }}>{item.name}</div>
                   <div style={{ fontSize: 13, color: "var(--purple)", fontWeight: 600, marginTop: 2 }}>$ {item.price}</div>
                 </div>
-                <div className="qty-control">
+                <div className="qty-control" style={{ flexShrink: 0 }}>
                   <button onClick={() => setDrink(item.name, -1)} disabled={qty === 0}>−</button>
                   <span className="qty-num">{qty}</span>
                   <button onClick={() => setDrink(item.name, 1)}>+</button>
@@ -423,7 +453,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
               <div className="card-title">🍱 餐點</div>
               {foodItems.map((item, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
-                  <span>{item.name} × {item.qty}</span>
+                  <span style={{ flex: 1 }}>{item.name} × {item.qty}</span>
                   <span style={{ fontWeight: 600 }}>$ {item.price * item.qty}</span>
                 </div>
               ))}
@@ -435,7 +465,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
               {drinkItems.map((item, i) => (
                 <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-                    <span>{item.name} × {item.qty}</span>
+                    <span style={{ flex: 1 }}>{item.name} × {item.qty}</span>
                     <span style={{ fontWeight: 600, color: "var(--purple)" }}>$ {item.price * item.qty}</span>
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>🍬 {item.sugar}　🧊 {item.ice}</div>
