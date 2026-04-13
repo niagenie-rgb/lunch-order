@@ -91,9 +91,16 @@ export default function MyOrderPage({ navigate, sessionId, userId }) {
           </div>
         ))}
         {(order.drinkItems || []).map((item, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
-            <span>{item.name} × {item.qty}</span>
-            <span style={{ fontWeight: 600, color: "var(--purple)" }}>$ {item.price * item.qty}</span>
+          <div key={i} style={{ padding: "9px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>{item.name} × {item.qty}</span>
+              <span style={{ fontWeight: 600, color: "var(--purple)" }}>$ {item.price * item.qty}</span>
+            </div>
+            {(item.sugar || item.ice) && (
+              <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>
+                {item.sugar && `🍬 ${item.sugar}`}{item.sugar && item.ice && "　"}{item.ice && `🧊 ${item.ice}`}
+              </div>
+            )}
           </div>
         ))}
         {order.note && (
