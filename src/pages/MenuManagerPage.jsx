@@ -23,6 +23,7 @@ export default function MenuManagerPage({ navigate }) {
   const [editItems, setEditItems] = useState([]);
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemCategory, setNewItemCategory] = useState("");
   const [importing, setImporting] = useState(false);
   const [importPreview, setImportPreview] = useState(null); // { stores: [...] }
   const [importStep, setImportStep] = useState("idle"); // idle | preview | importing | done
@@ -112,16 +113,16 @@ export default function MenuManagerPage({ navigate }) {
             sugarOptions: sugarOptions || "",
           };
         }
+        const category = String(row.category || "").trim();
         if (price > 0) {
-          storeMap[name].items.push({
-            name: itemName,
-            price,
-            ...(type === "drink" && {
-              temperature: temperature || storeMap[name].temperature,
-              iceOptions: iceOptions || storeMap[name].iceOptions,
-              sugarOptions: sugarOptions || storeMap[name].sugarOptions,
-            })
-          });
+          const itemObj = { name: itemName, price };
+          if (category) itemObj.category = category;
+          if (type === "drink") {
+            itemObj.temperature = temperature || storeMap[name].temperature;
+            itemObj.iceOptions = iceOptions || storeMap[name].iceOptions;
+            itemObj.sugarOptions = sugarOptions || storeMap[name].sugarOptions;
+          }
+          storeMap[name].items.push(itemObj);
         }
       }
 
@@ -247,13 +248,15 @@ export default function MenuManagerPage({ navigate }) {
   const startEdit = (restaurant) => {
     setEditingId(restaurant.id);
     setEditItems([...(restaurant.items || [])]);
-    setNewItemName(""); setNewItemPrice("");
+    setNewItemName(""); setNewItemPrice(""); setNewItemCategory("");
   };
 
   const addItem = () => {
     if (!newItemName.trim() || !newItemPrice) { showToast("請填寫名稱和價格", "error"); return; }
-    setEditItems([...editItems, { name: newItemName.trim(), price: Number(newItemPrice) }]);
-    setNewItemName(""); setNewItemPrice("");
+    const item = { name: newItemName.trim(), price: Number(newItemPrice) };
+    if (newItemCategory.trim()) item.category = newItemCategory.trim();
+    setEditItems([...editItems, item]);
+    setNewItemName(""); setNewItemPrice(""); setNewItemCategory("");
   };
 
   const removeItem = (i) => setEditItems(editItems.filter((_, idx) => idx !== i));
@@ -480,8 +483,8 @@ export default function MenuManagerPage({ navigate }) {
       )}
       {foodList.map(r => (
         <RestaurantCard key={r.id} restaurant={r} isEditing={editingId === r.id}
-          editItems={editItems} newItemName={newItemName} newItemPrice={newItemPrice}
-          setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice}
+          editItems={editItems} newItemName={newItemName} newItemPrice={newItemPrice} newItemCategory={newItemCategory}
+          setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice} setNewItemCategory={setNewItemCategory}
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
           onSave={saveItems} onCancel={() => setEditingId(null)} saving={saving} />
@@ -496,8 +499,8 @@ export default function MenuManagerPage({ navigate }) {
       )}
       {drinkList.map(r => (
         <RestaurantCard key={r.id} restaurant={r} isEditing={editingId === r.id}
-          editItems={editItems} newItemName={newItemName} newItemPrice={newItemPrice}
-          setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice}
+          editItems={editItems} newItemName={newItemName} newItemPrice={newItemPrice} newItemCategory={newItemCategory}
+          setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice} setNewItemCategory={setNewItemCategory}
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
           onSave={saveItems} onCancel={() => setEditingId(null)} saving={saving} />
@@ -534,7 +537,10 @@ function RestaurantCard({ restaurant, isEditing, editItems, newItemName, newItem
         <div style={{ marginTop: 10, borderTop: "1px solid var(--bg2)", paddingTop: 10 }}>
           {(restaurant.items || []).slice(0, 5).map((item, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0", color: "var(--text2)" }}>
-              <span>{item.name}</span>
+              <span>
+                {item.category && <span style={{ fontSize: 11, background: "var(--bg2)", borderRadius: 4, padding: "1px 5px", marginRight: 5, color: "var(--text3)" }}>{item.category}</span>}
+                {item.name}
+              </span>
               <span style={{ fontWeight: 600, color: restaurant.type === "food" ? "var(--accent)" : "var(--purple)" }}>$ {item.price}</span>
             </div>
           ))}
@@ -557,7 +563,10 @@ function RestaurantCard({ restaurant, isEditing, editItems, newItemName, newItem
                       <button onClick={() => onMoveItem(i, -1)} disabled={i === 0} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text3)", lineHeight: 1, padding: "1px 4px" }}>▲</button>
                       <button onClick={() => onMoveItem(i, 1)} disabled={i === editItems.length - 1} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text3)", lineHeight: 1, padding: "1px 4px" }}>▼</button>
                     </div>
-                    <span style={{ flex: 1, fontSize: 14 }}>{item.name}</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 14 }}>{item.name}</span>
+                      {item.category && <span style={{ fontSize: 11, background: "var(--bg2)", borderRadius: 4, padding: "1px 5px", marginLeft: 6, color: "var(--text3)" }}>{item.category}</span>}
+                    </div>
                     <span className="badge badge-amber" style={{ fontSize: 12 }}>$ {item.price}</span>
                     <button onClick={() => onRemoveItem(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: 16, padding: "0 4px" }}>✕</button>
                   </div>
@@ -565,10 +574,15 @@ function RestaurantCard({ restaurant, isEditing, editItems, newItemName, newItem
               </div>
             )
           }
-          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-            <input style={{ flex: 2, padding: "9px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)" }} placeholder="品項名稱" value={newItemName} onChange={e => setNewItemName(e.target.value)} onKeyDown={e => e.key === "Enter" && onAddItem()} />
-            <input style={{ flex: 1, padding: "9px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)" }} placeholder="價格" type="number" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} onKeyDown={e => e.key === "Enter" && onAddItem()} />
-            <button className="btn btn-secondary btn-sm" onClick={onAddItem} style={{ flexShrink: 0 }}>+ 新增</button>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <input style={{ flex: 1, padding: "9px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)" }} placeholder="品項名稱" value={newItemName} onChange={e => setNewItemName(e.target.value)} onKeyDown={e => e.key === "Enter" && onAddItem()} />
+              <input style={{ width: 80, padding: "9px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)" }} placeholder="價格" type="number" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} onKeyDown={e => e.key === "Enter" && onAddItem()} />
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input style={{ flex: 1, padding: "9px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)" }} placeholder="分類（選填，例：麵食系列）" value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)} onKeyDown={e => e.key === "Enter" && onAddItem()} />
+              <button className="btn btn-secondary btn-sm" onClick={onAddItem} style={{ flexShrink: 0 }}>+ 新增</button>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-primary" style={{ flex: 2 }} onClick={onSave} disabled={saving}>{saving ? "儲存中..." : "💾 儲存菜單"}</button>
