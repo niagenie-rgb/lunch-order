@@ -9,6 +9,94 @@ function Toast({ msg }) {
   return msg ? <div className="toast">{msg}</div> : null;
 }
 
+function DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkOpt, SUGAR_OPTIONS, ICE_OPTIONS }) {
+  const drinkGroups = {};
+  (session.drinkItems || []).forEach(item => {
+    const cat = item.category || "";
+    if (!drinkGroups[cat]) drinkGroups[cat] = [];
+    drinkGroups[cat].push(item);
+  });
+  const hasDrinkCats = Object.keys(drinkGroups).some(k => k !== "");
+
+  const DrinkCard = ({ item }) => {
+    const qty = drinkSelections[item.name] || 0;
+    const opts = drinkOptions[item.name] || { sugar: "全糖", ice: "冰" };
+    return (
+      <div style={{
+        background: qty > 0 ? "#F8F5FF" : "var(--card)",
+        border: `1.5px solid ${qty > 0 ? "var(--purple)" : "var(--border)"}`,
+        borderRadius: "var(--radius-sm)", padding: "14px", marginBottom: 10
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{item.name}</div>
+            <div style={{ fontSize: 13, color: "var(--purple)", fontWeight: 600, marginTop: 2 }}>$ {item.price}</div>
+          </div>
+          <div className="qty-control" style={{ flexShrink: 0 }}>
+            <button onClick={() => setDrink(item.name, -1)} disabled={qty === 0}>−</button>
+            <span className="qty-num">{qty}</span>
+            <button onClick={() => setDrink(item.name, 1)}>+</button>
+          </div>
+        </div>
+        {qty > 0 && (
+          <div style={{ marginTop: 12, borderTop: "1px solid var(--bg2)", paddingTop: 12 }}>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>🍬 糖度</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {SUGAR_OPTIONS.map(s => (
+                  <button key={s} onClick={() => setDrinkOpt(item.name, "sugar", s)} style={{
+                    padding: "5px 12px", borderRadius: 20, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                    background: opts.sugar === s ? "var(--purple)" : "var(--bg2)",
+                    color: opts.sugar === s ? "white" : "var(--text2)",
+                    border: `1.5px solid ${opts.sugar === s ? "var(--purple)" : "var(--border)"}`,
+                    fontWeight: opts.sugar === s ? 600 : 400
+                  }}>{s}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>🧊 冰量</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {ICE_OPTIONS.map(ic => (
+                  <button key={ic} onClick={() => setDrinkOpt(item.name, "ice", ic)} style={{
+                    padding: "5px 12px", borderRadius: 20, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                    background: opts.ice === ic ? "#0C9CF0" : "var(--bg2)",
+                    color: opts.ice === ic ? "white" : "var(--text2)",
+                    border: `1.5px solid ${opts.ice === ic ? "#0C9CF0" : "var(--border)"}`,
+                    fontWeight: opts.ice === ic ? 600 : 400
+                  }}>{ic}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (hasDrinkCats) {
+    return Object.entries(drinkGroups).map(([cat, items]) => (
+      <div key={cat}>
+        {cat && (
+          <div style={{
+            background: "var(--purple)", color: "white",
+            padding: "5px 12px", borderRadius: 6,
+            fontSize: 12, fontWeight: 700,
+            margin: "14px 0 8px", display: "inline-block"
+          }}>{cat}</div>
+        )}
+        {items.map((item, i) => <DrinkCard key={i} item={item} />)}
+      </div>
+    ));
+  }
+  return (
+    <>
+      <p className="section-label">選擇飲料</p>
+      {(session.drinkItems || []).map((item, i) => <DrinkCard key={i} item={item} />)}
+    </>
+  );
+}
+
 export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -368,94 +456,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
           <button className="btn btn-icon" onClick={() => setStep("food")}>←</button>
           <h1>{session.drinkName}</h1>
         </div>
-        {(() => {
-          // Group drinks by category
-          const drinkGroups = {};
-          (session.drinkItems || []).forEach(item => {
-            const cat = item.category || "";
-            if (!drinkGroups[cat]) drinkGroups[cat] = [];
-            drinkGroups[cat].push(item);
-          });
-          const hasDrinkCats = Object.keys(drinkGroups).some(k => k !== "");
-          const DrinkItemCard = ({ item }) => {
-            const qty = drinkSelections[item.name] || 0;
-            const opts = drinkOptions[item.name] || { sugar: "全糖", ice: "冰" };
-            return (
-            <div style={{
-              background: qty > 0 ? "#F8F5FF" : "var(--card)",
-              border: `1.5px solid ${qty > 0 ? "var(--purple)" : "var(--border)"}`,
-              borderRadius: "var(--radius-sm)", padding: "14px", marginBottom: 10
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{item.name}</div>
-                  <div style={{ fontSize: 13, color: "var(--purple)", fontWeight: 600, marginTop: 2 }}>$ {item.price}</div>
-                </div>
-                <div className="qty-control" style={{ flexShrink: 0 }}>
-                  <button onClick={() => setDrink(item.name, -1)} disabled={qty === 0}>−</button>
-                  <span className="qty-num">{qty}</span>
-                  <button onClick={() => setDrink(item.name, 1)}>+</button>
-                </div>
-              </div>
-              {qty > 0 && (
-                <div style={{ marginTop: 12, borderTop: "1px solid var(--bg2)", paddingTop: 12 }}>
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>🍬 糖度</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {SUGAR_OPTIONS.map(s => (
-                        <button key={s} onClick={() => setDrinkOpt(item.name, "sugar", s)} style={{
-                          padding: "5px 12px", borderRadius: 20, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                          background: opts.sugar === s ? "var(--purple)" : "var(--bg2)",
-                          color: opts.sugar === s ? "white" : "var(--text2)",
-                          border: `1.5px solid ${opts.sugar === s ? "var(--purple)" : "var(--border)"}`,
-                          fontWeight: opts.sugar === s ? 600 : 400
-                        }}>{s}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>🧊 冰量</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {ICE_OPTIONS.map(ic => (
-                        <button key={ic} onClick={() => setDrinkOpt(item.name, "ice", ic)} style={{
-                          padding: "5px 12px", borderRadius: 20, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                          background: opts.ice === ic ? "#0C9CF0" : "var(--bg2)",
-                          color: opts.ice === ic ? "white" : "var(--text2)",
-                          border: `1.5px solid ${opts.ice === ic ? "#0C9CF0" : "var(--border)"}`,
-                          fontWeight: opts.ice === ic ? 600 : 400
-                        }}>{ic}</button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-          </div>
-            );
-          };
-          if (hasDrinkCats) {
-            return Object.entries(drinkGroups).map(([cat, items]) => (
-              <div key={cat}>
-                {cat && (
-                  <div style={{
-                    background: "var(--purple)", color: "white",
-                    padding: "5px 12px", borderRadius: 6,
-                    fontSize: 12, fontWeight: 700,
-                    margin: "14px 0 8px", display: "inline-block"
-                  }}>{cat}</div>
-                )}
-                {items.map((item, i) => <DrinkItemCard key={i} item={item} />)}
-              </div>
-            ));
-          }
-          return (
-            <>
-              <p className="section-label">選擇飲料</p>
-              {(session.drinkItems || []).map((item, i) => <DrinkItemCard key={i} item={item} />)}
-            </>
-          );
-        })()}
+        {DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkOpt, SUGAR_OPTIONS, ICE_OPTIONS })}
         <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setStep("confirm")}>
           確認訂單 →
         </button>
