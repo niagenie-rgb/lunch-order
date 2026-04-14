@@ -17,6 +17,8 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [selectedFoodId, setSelectedFoodId] = useState("");
   const [selectedDrinkId, setSelectedDrinkId] = useState("");
+  const [selectedFoodInfo, setSelectedFoodInfo] = useState({ phone: "", address: "", deliveryNote: "" });
+  const [selectedDrinkInfo, setSelectedDrinkInfo] = useState({ phone: "", address: "", deliveryNote: "" });
   const [restaurantName, setRestaurantName] = useState("");
   const [drinkName, setDrinkName] = useState("");
   const [menuItems, setMenuItems] = useState([]);
@@ -65,7 +67,11 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     setSelectedDrinkId(id);
     if (!id || id === "__manual__") { setDrinkName(""); setDrinkItems([]); return; }
     const r = allRestaurants.find(r => r.id === id);
-    if (r) { setDrinkName(r.name); setDrinkItems(r.items || []); }
+    if (r) {
+      setDrinkName(r.name);
+      setDrinkItems(r.items || []);
+      setSelectedDrinkInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
+    }
   };
 
   const addMenuItem = () => {
@@ -87,7 +93,13 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     try {
       const ref = await addDoc(collection(db, "sessions"), {
         date, restaurantName,
+        restaurantPhone: selectedFoodInfo.phone || "",
+        restaurantAddress: selectedFoodInfo.address || "",
+        restaurantNote: selectedFoodInfo.deliveryNote || "",
         drinkName: drinkName || "",
+        drinkPhone: selectedDrinkInfo.phone || "",
+        drinkAddress: selectedDrinkInfo.address || "",
+        drinkNote: selectedDrinkInfo.deliveryNote || "",
         menuItems,
         drinkItems: drinkName ? drinkItems : [],
         status: "open",
@@ -347,6 +359,13 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         <div>
           <div className="card">
             <div className="card-title">📦 餐廳點餐清單（{session?.restaurantName}）</div>
+            {(session?.restaurantPhone || session?.restaurantAddress) && (
+              <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg2)", borderRadius: 8 }}>
+                {session?.restaurantPhone && <div style={{ fontSize: 13, marginBottom: 3 }}>📞 <a href={`tel:${session.restaurantPhone}`} style={{ color: "var(--accent)", fontWeight: 600 }}>{session.restaurantPhone}</a></div>}
+                {session?.restaurantAddress && <div style={{ fontSize: 12, color: "var(--text2)" }}>📍 {session.restaurantAddress}</div>}
+                {session?.restaurantNote && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🛵 {session.restaurantNote}</div>}
+              </div>
+            )}
             {summary?.food.length === 0
               ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無餐點訂單</p>
               : summary?.food.map((item, i) => (
@@ -363,6 +382,13 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           {session?.drinkName && (
             <div className="card">
               <div className="card-title">🧋 飲料點餐清單（{session?.drinkName}）</div>
+              {(session?.drinkPhone || session?.drinkAddress) && (
+                <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg2)", borderRadius: 8 }}>
+                  {session?.drinkPhone && <div style={{ fontSize: 13, marginBottom: 3 }}>📞 <a href={`tel:${session.drinkPhone}`} style={{ color: "var(--purple)", fontWeight: 600 }}>{session.drinkPhone}</a></div>}
+                  {session?.drinkAddress && <div style={{ fontSize: 12, color: "var(--text2)" }}>📍 {session.drinkAddress}</div>}
+                  {session?.drinkNote && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🛵 {session.drinkNote}</div>}
+                </div>
+              )}
               {summary?.drinks.length === 0
                 ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無飲料訂單</p>
                 : summary?.drinks.map((item, i) => (

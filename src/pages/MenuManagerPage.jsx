@@ -87,7 +87,16 @@ export default function MenuManagerPage({ navigate }) {
         const sugarOptions = String(row.sugar_options || "").trim();
         if (!name || !itemName || !type) continue;
         if (name.startsWith("（範例）") || itemName.startsWith("（範例）")) continue;
-        if (!storeMap[name]) storeMap[name] = { name, type: type === "drink" ? "drink" : "food", items: [] };
+        const phone = String(row.phone || "").trim();
+        const address = String(row.address || "").trim();
+        const deliveryNote = String(row.delivery_note || "").trim();
+        if (!storeMap[name]) {
+          storeMap[name] = { name, type: type === "drink" ? "drink" : "food", items: [] };
+        }
+        // Update store-level info if present
+        if (phone) storeMap[name].phone = phone;
+        if (address) storeMap[name].address = address;
+        if (deliveryNote) storeMap[name].deliveryNote = deliveryNote;;
         if (price > 0) {
           const itemObj = { name: itemName, price };
           if (category) itemObj.category = category;
@@ -139,7 +148,9 @@ export default function MenuManagerPage({ navigate }) {
         if (op === "add") {
           const firstItems = chunks[0] || [];
           const ref = await addDoc(collection(db, "restaurants"), {
-            name: s.name, type: s.type, items: firstItems, createdAt: serverTimestamp(),
+            name: s.name, type: s.type, items: firstItems,
+            phone: s.phone || "", address: s.address || "", deliveryNote: s.deliveryNote || "",
+            createdAt: serverTimestamp(),
           });
           await sleep(200);
           let allItems = [...firstItems];
@@ -154,7 +165,11 @@ export default function MenuManagerPage({ navigate }) {
           const id = existingMap[s.name];
           for (let c = 0; c < chunks.length; c++) {
             allItems = [...allItems, ...chunks[c]];
-            await updateDoc(doc(db, "restaurants", id), { items: allItems });
+            const updatePayload = { items: allItems };
+            if (s.phone) updatePayload.phone = s.phone;
+            if (s.address) updatePayload.address = s.address;
+            if (s.deliveryNote) updatePayload.deliveryNote = s.deliveryNote;
+            await updateDoc(doc(db, "restaurants", id), updatePayload);
             await sleep(200);
           }
           updated++;
@@ -172,11 +187,20 @@ export default function MenuManagerPage({ navigate }) {
   const resetImport = () => { setImportStep("idle"); setImportPreview(null); };
 
   // ── Manual CRUD ───────────────────────────────────────────────────
+  const [newPhone, setNewPhone] = useState("");
+  const [newAddress, setNewAddress] = useState("");
+  const [newDeliveryNote, setNewDeliveryNote] = useState("");
+
   const addRestaurant = async () => {
     if (!newName.trim()) { showToast("請輸入名稱", "error"); return; }
     setSaving(true);
-    await addDoc(collection(db, "restaurants"), { name: newName.trim(), type: newType, items: [], createdAt: serverTimestamp() });
-    setNewName(""); setNewType("food"); setShowAddForm(false); setSaving(false);
+    await addDoc(collection(db, "restaurants"), {
+      name: newName.trim(), type: newType, items: [],
+      phone: newPhone.trim(), address: newAddress.trim(), deliveryNote: newDeliveryNote.trim(),
+      createdAt: serverTimestamp()
+    });
+    setNewName(""); setNewType("food"); setNewPhone(""); setNewAddress(""); setNewDeliveryNote("");
+    setShowAddForm(false); setSaving(false);
     showToast("✅ 新增成功！", "success");
   };
 
@@ -356,7 +380,19 @@ export default function MenuManagerPage({ navigate }) {
           </div>
           <div className="field">
             <label>名稱</label>
-            <input placeholder={newType === "food" ? "例：大碗公自助餐" : "例：50嵐"} value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addRestaurant()} autoFocus />
+            <input placeholder={newType === "food" ? "例：大碗公自助餐" : "例：50嵐"} value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
+          </div>
+          <div className="field">
+            <label>電話（選填）</label>
+            <input placeholder="例：06-2306620" value={newPhone} onChange={e => setNewPhone(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>地址（選填）</label>
+            <input placeholder="例：台南市歸仁區中正南路一段37號" value={newAddress} onChange={e => setNewAddress(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>備註（選填）</label>
+            <input placeholder="例：可外送、僅自取、需預訂" value={newDeliveryNote} onChange={e => setNewDeliveryNote(e.target.value)} />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-primary" style={{ flex: 2 }} onClick={addRestaurant} disabled={saving}>{saving ? "新增中..." : "✅ 新增"}</button>
@@ -409,6 +445,9 @@ function RestaurantCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>{restaurant.name}</div>
           <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 1 }}>{(restaurant.items || []).length} 個品項</div>
+          {restaurant.phone && <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 1 }}>📞 {restaurant.phone}</div>}
+          {restaurant.address && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>📍 {restaurant.address}</div>}
+          {restaurant.deliveryNote && <div style={{ fontSize: 11, color: "var(--green)", marginTop: 1 }}>🛵 {restaurant.deliveryNote}</div>}
         </div>
         {!isEditing && (
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
