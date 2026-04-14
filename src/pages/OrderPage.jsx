@@ -368,12 +368,20 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
           <button className="btn btn-icon" onClick={() => setStep("food")}>←</button>
           <h1>{session.drinkName}</h1>
         </div>
-        <p className="section-label">選擇飲料</p>
-        {(session.drinkItems || []).map((item, i) => {
-          const qty = drinkSelections[item.name] || 0;
-          const opts = drinkOptions[item.name] || { sugar: "全糖", ice: "冰" };
-          return (
-            <div key={i} style={{
+        {(() => {
+          // Group drinks by category
+          const drinkGroups = {};
+          (session.drinkItems || []).forEach(item => {
+            const cat = item.category || "";
+            if (!drinkGroups[cat]) drinkGroups[cat] = [];
+            drinkGroups[cat].push(item);
+          });
+          const hasDrinkCats = Object.keys(drinkGroups).some(k => k !== "");
+          const DrinkItemCard = ({ item }) => {
+            const qty = drinkSelections[item.name] || 0;
+            const opts = drinkOptions[item.name] || { sugar: "全糖", ice: "冰" };
+            return (
+            <div style={{
               background: qty > 0 ? "#F8F5FF" : "var(--card)",
               border: `1.5px solid ${qty > 0 ? "var(--purple)" : "var(--border)"}`,
               borderRadius: "var(--radius-sm)", padding: "14px", marginBottom: 10
@@ -423,7 +431,31 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
               )}
             </div>
           );
-        })}
+          </div>
+            );
+          };
+          if (hasDrinkCats) {
+            return Object.entries(drinkGroups).map(([cat, items]) => (
+              <div key={cat}>
+                {cat && (
+                  <div style={{
+                    background: "var(--purple)", color: "white",
+                    padding: "5px 12px", borderRadius: 6,
+                    fontSize: 12, fontWeight: 700,
+                    margin: "14px 0 8px", display: "inline-block"
+                  }}>{cat}</div>
+                )}
+                {items.map((item, i) => <DrinkItemCard key={i} item={item} />)}
+              </div>
+            ));
+          }
+          return (
+            <>
+              <p className="section-label">選擇飲料</p>
+              {(session.drinkItems || []).map((item, i) => <DrinkItemCard key={i} item={item} />)}
+            </>
+          );
+        })()}
         <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setStep("confirm")}>
           確認訂單 →
         </button>
