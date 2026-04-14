@@ -368,27 +368,33 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             )}
             {summary?.food.length === 0
               ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無餐點訂單</p>
-              : summary?.food.map((item, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
-                  <span style={{ fontWeight: 600 }}>{item.name}</span>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <span className="badge badge-gray">× {item.qty}</span>
-                    <span style={{ color: "var(--accent)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
+              : summary?.food.map((item, i) => {
+                // Find who ordered this item and their notes
+                const orderers = orders.filter(o =>
+                  (o.foodItems || []).some(fi => fi.name === item.name)
+                ).map(o => ({ name: o.userName, qty: (o.foodItems || []).find(fi => fi.name === item.name)?.qty || 0, note: o.note }));
+                return (
+                  <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontWeight: 600 }}>{item.name}</span>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <span className="badge badge-gray">× {item.qty}</span>
+                        <span style={{ color: "var(--accent)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
+                      </div>
+                    </div>
+                    {orderers.some(o => o.note) && (
+                      <div style={{ marginTop: 4 }}>
+                        {orderers.filter(o => o.note).map((o, j) => (
+                          <div key={j} style={{ fontSize: 12, color: "var(--text2)", paddingLeft: 8 }}>
+                            └ <span style={{ fontWeight: 600, color: "var(--accent)" }}>{o.name}</span>：{o.note}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             }
-            {orders.some(o => o.note) && (
-              <div style={{ marginTop: 12, borderTop: "1.5px dashed var(--border)", paddingTop: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>📝 各人備註</div>
-                {orders.filter(o => o.note).map((o, i) => (
-                  <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--bg2)" }}>
-                    <span style={{ fontWeight: 600, color: "var(--accent)" }}>{o.userName}：</span>
-                    <span style={{ color: "var(--text2)" }}>{o.note}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
           {session?.drinkName && (
             <div className="card">
@@ -402,15 +408,34 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               )}
               {summary?.drinks.length === 0
                 ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無飲料訂單</p>
-                : summary?.drinks.map((item, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
-                    <span style={{ fontWeight: 600 }}>{item.name}</span>
-                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <span className="badge badge-gray">× {item.qty}</span>
-                      <span style={{ color: "var(--purple)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
+                : (() => {
+                  // For drinks, show each person's order individually (with sugar/ice)
+                  const drinkOrders = [];
+                  orders.forEach(o => {
+                    (o.drinkItems || []).forEach(item => {
+                      drinkOrders.push({ userName: o.userName, ...item, note: o.note });
+                    });
+                  });
+                  return drinkOrders.map((item, i) => (
+                    <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <span style={{ fontWeight: 600 }}>{item.name}</span>
+                          <span style={{ fontSize: 12, color: "var(--text2)", marginLeft: 6 }}>（{item.userName}）</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                          <span className="badge badge-gray">× {item.qty}</span>
+                          <span style={{ color: "var(--purple)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
+                        </div>
+                      </div>
+                      {(item.sugar || item.ice) && (
+                        <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3, paddingLeft: 4 }}>
+                          🍬 {item.sugar || "-"}　🧊 {item.ice || "-"}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  ));
+                })()
               }
             </div>
           )}
