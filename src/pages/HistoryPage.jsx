@@ -65,6 +65,18 @@ export default function HistoryPage({ navigate }) {
     setExpandedData(prev => ({ ...prev, [id]: orders }));
   };
 
+  const deleteSession = async (id, e) => {
+    e.stopPropagation(); // 避免觸發展開
+    if (!window.confirm("確定要刪除這筆訂單嗎？")) return;
+    const ordersSnap = await getDocs(collection(db, "sessions", id, "orders"));
+    for (const orderDoc of ordersSnap.docs) {
+      await deleteDoc(doc(db, "sessions", id, "orders", orderDoc.id));
+    }
+    await deleteDoc(doc(db, "sessions", id));
+    setSessions(prev => prev.filter(s => s.id !== id));
+    if (expanded === id) setExpanded(null);
+  };
+
   const formatDate = (session) => {
     if (session.date) return session.date;
     if (session.createdAt?.seconds) {
@@ -124,6 +136,10 @@ export default function HistoryPage({ navigate }) {
                 <span className={`badge ${sess.status === "closed" ? "badge-gray" : "badge-green"}`} style={{ flexShrink: 0 }}>
                   {sess.status === "closed" ? "已結單" : "進行中"}
                 </span>
+                <button
+                  onClick={(e) => deleteSession(sess.id, e)}
+                  style={{ background: "var(--red-bg)", color: "var(--red)", border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer", flexShrink: 0, fontFamily: "inherit" }}
+                >刪除</button>
                 <span style={{ color: "var(--text3)", fontSize: 18, transition: "transform 0.2s", display: "inline-block", transform: isOpen ? "rotate(90deg)" : "none", flexShrink: 0 }}>›</span>
               </div>
 

@@ -378,6 +378,17 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                 </div>
               ))
             }
+            {orders.some(o => o.note) && (
+              <div style={{ marginTop: 12, borderTop: "1.5px dashed var(--border)", paddingTop: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>📝 各人備註</div>
+                {orders.filter(o => o.note).map((o, i) => (
+                  <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--bg2)" }}>
+                    <span style={{ fontWeight: 600, color: "var(--accent)" }}>{o.userName}：</span>
+                    <span style={{ color: "var(--text2)" }}>{o.note}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {session?.drinkName && (
             <div className="card">
