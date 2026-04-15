@@ -21,6 +21,7 @@ export default function MenuManagerPage({ navigate }) {
   const [newType, setNewType] = useState("food");
   const [saving, setSaving] = useState(false);
   const [editItems, setEditItems] = useState([]);
+  const [editInfo, setEditInfo] = useState({ phone: "", address: "", deliveryNote: "" });
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemCategory, setNewItemCategory] = useState("");
@@ -214,6 +215,7 @@ export default function MenuManagerPage({ navigate }) {
   const startEdit = (r) => {
     setEditingId(r.id);
     setEditItems([...(r.items || [])]);
+    setEditInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     setNewItemName(""); setNewItemPrice(""); setNewItemCategory("");
   };
 
@@ -237,9 +239,14 @@ export default function MenuManagerPage({ navigate }) {
 
   const saveItems = async () => {
     setSaving(true);
-    await updateDoc(doc(db, "restaurants", editingId), { items: editItems });
+    await updateDoc(doc(db, "restaurants", editingId), {
+      items: editItems,
+      phone: editInfo.phone.trim(),
+      address: editInfo.address.trim(),
+      deliveryNote: editInfo.deliveryNote.trim(),
+    });
     setSaving(false); setEditingId(null);
-    showToast("✅ 菜單已儲存！", "success");
+    showToast("✅ 已儲存！", "success");
   };
 
   if (loading) return <div className="loading">載入中...</div>;
@@ -406,7 +413,8 @@ export default function MenuManagerPage({ navigate }) {
       {foodList.length === 0 && <div className="empty" style={{ padding: "20px" }}><p>還沒有餐廳，點「選擇檔案」匯入 Excel</p></div>}
       {foodList.map(r => (
         <RestaurantCard key={r.id} restaurant={r} isEditing={editingId === r.id}
-          editItems={editItems} newItemName={newItemName} newItemPrice={newItemPrice} newItemCategory={newItemCategory}
+          editItems={editItems} editInfo={editInfo} setEditInfo={setEditInfo}
+          newItemName={newItemName} newItemPrice={newItemPrice} newItemCategory={newItemCategory}
           setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice} setNewItemCategory={setNewItemCategory}
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
@@ -418,7 +426,8 @@ export default function MenuManagerPage({ navigate }) {
       {drinkList.length === 0 && <div className="empty" style={{ padding: "20px" }}><p>還沒有飲料店，點「選擇檔案」匯入 Excel</p></div>}
       {drinkList.map(r => (
         <RestaurantCard key={r.id} restaurant={r} isEditing={editingId === r.id}
-          editItems={editItems} newItemName={newItemName} newItemPrice={newItemPrice} newItemCategory={newItemCategory}
+          editItems={editItems} editInfo={editInfo} setEditInfo={setEditInfo}
+          newItemName={newItemName} newItemPrice={newItemPrice} newItemCategory={newItemCategory}
           setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice} setNewItemCategory={setNewItemCategory}
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
@@ -478,6 +487,45 @@ function RestaurantCard({
       {/* Edit mode */}
       {isEditing && (
         <div>
+          {/* Store info editing */}
+          <div style={{ marginBottom: 14, padding: "12px", background: "var(--bg2)", borderRadius: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10 }}>📋 店家資訊</div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 4 }}>📞 電話</div>
+              <input style={{ width: "100%", padding: "8px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)", boxSizing: "border-box" }}
+                placeholder="例：06-2306620"
+                value={editInfo.phone}
+                onChange={e => setEditInfo(prev => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 4 }}>📍 地址</div>
+              <input style={{ width: "100%", padding: "8px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)", boxSizing: "border-box" }}
+                placeholder="例：台南市歸仁區中正南路一段37號"
+                value={editInfo.address}
+                onChange={e => setEditInfo(prev => ({ ...prev, address: e.target.value }))}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 4 }}>🛵 外送/自取備註</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                {["可外送","僅自取","外送+自取"].map(opt => (
+                  <button key={opt} onClick={() => setEditInfo(prev => ({ ...prev, deliveryNote: opt }))}
+                    style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+                      background: editInfo.deliveryNote === opt ? "var(--green)" : "var(--bg2)",
+                      color: editInfo.deliveryNote === opt ? "white" : "var(--text2)",
+                      border: `1.5px solid ${editInfo.deliveryNote === opt ? "var(--green)" : "var(--border)"}`,
+                    }}>{opt}</button>
+                ))}
+              </div>
+              <input style={{ width: "100%", padding: "8px 11px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit", background: "var(--card)", color: "var(--text)", boxSizing: "border-box" }}
+                placeholder="或自行填寫備註..."
+                value={editInfo.deliveryNote}
+                onChange={e => setEditInfo(prev => ({ ...prev, deliveryNote: e.target.value }))}
+              />
+            </div>
+          </div>
+
           {editItems.length === 0
             ? <p style={{ color: "var(--text3)", fontSize: 13, marginBottom: 12 }}>還沒有品項，從下方新增</p>
             : (
