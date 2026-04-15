@@ -112,7 +112,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   const [finalOrder, setFinalOrder] = useState(null);
 
   const SUGAR_OPTIONS = ["全糖", "半糖", "三分糖", "無糖"];
-  const ICE_OPTIONS = ["冰", "微冰", "去冰", "溫熱"];
+  const ICE_OPTIONS = ["冰", "少冰", "半冰", "微冰", "去冰", "溫熱"];
 
   useEffect(() => {
     if (!sessionId) return;
