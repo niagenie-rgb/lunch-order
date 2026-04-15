@@ -440,7 +440,7 @@ export default function MenuManagerPage({ navigate }) {
 }
 
 function RestaurantCard({
-  restaurant, isEditing, editItems,
+  restaurant, isEditing, editItems, editInfo, setEditInfo,
   newItemName, newItemPrice, newItemCategory,
   setNewItemName, setNewItemPrice, setNewItemCategory,
   onEdit, onDelete, onAddItem, onRemoveItem, onMoveItem, onSave, onCancel, saving
