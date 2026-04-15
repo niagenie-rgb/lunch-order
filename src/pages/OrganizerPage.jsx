@@ -58,9 +58,17 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
 
   const onSelectFood = (id) => {
     setSelectedFoodId(id);
-    if (!id || id === "__manual__") { setRestaurantName(""); setMenuItems([]); return; }
+    if (!id || id === "__manual__") {
+      setRestaurantName(""); setMenuItems([]);
+      setSelectedFoodInfo({ phone: "", address: "", deliveryNote: "" });
+      return;
+    }
     const r = allRestaurants.find(r => r.id === id);
-    if (r) { setRestaurantName(r.name); setMenuItems(r.items || []); }
+    if (r) {
+      setRestaurantName(r.name);
+      setMenuItems(r.items || []);
+      setSelectedFoodInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
+    }
   };
 
   const onSelectDrink = (id) => {
