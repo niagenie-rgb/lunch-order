@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   doc, getDoc, addDoc, collection,
-  query, where, getDocs, updateDoc, serverTimestamp
+  query, where, getDocs, updateDoc, deleteDoc, serverTimestamp
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -17,7 +17,6 @@ function DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkO
     drinkGroups[cat].push(item);
   });
   const hasDrinkCats = Object.keys(drinkGroups).some(k => k !== "");
-
   const DrinkCard = ({ item }) => {
     const qty = drinkSelections[item.name] || 0;
     const opts = drinkOptions[item.name] || { sugar: "全糖", ice: "冰" };
@@ -73,7 +72,6 @@ function DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkO
       </div>
     );
   };
-
   if (hasDrinkCats) {
     return Object.entries(drinkGroups).map(([cat, items]) => (
       <div key={cat}>
@@ -110,8 +108,10 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   const [submitting, setSubmitting] = useState(false);
   const [existingOrderId, setExistingOrderId] = useState(null);
   const [finalOrder, setFinalOrder] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const SUGAR_OPTIONS = ["全糖", "半糖", "三分糖", "無糖"];
+  // ── 修正1：加入「一份糖」選項 ──
+  const SUGAR_OPTIONS = ["全糖", "一份糖", "半糖", "三分糖", "無糖"];
   const ICE_OPTIONS = ["冰", "少冰", "半冰", "微冰", "去冰", "溫熱"];
 
   useEffect(() => {
@@ -219,6 +219,33 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     setStep("name");
   };
 
+  // 修改訂單：回到點餐畫面
+  const editOrder = () => {
+    setStep("food");
+  };
+
+  // 刪除訂單
+  const deleteOrder = async () => {
+    if (!existingOrderId) return;
+    if (!window.confirm("確定要刪除這筆訂單嗎？")) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, "sessions", sessionId, "orders", existingOrderId));
+      setExistingOrderId(null);
+      setFinalOrder(null);
+      setFoodSelections({});
+      setDrinkSelections({});
+      setDrinkOptions({});
+      setNote("");
+      setUserName("");
+      setStep("name");
+      showToast("訂單已刪除");
+    } catch (e) {
+      showToast("刪除失敗，請重試");
+    }
+    setDeleting(false);
+  };
+
   const submit = async () => {
     const foodItems = getFoodItems();
     const drinkItems = getDrinkItems();
@@ -238,6 +265,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       localStorage.setItem("lunch_uid", uid);
       localStorage.setItem("lunch_session", sessionId);
       setFinalOrder({ foodItems, drinkItems, total, userName });
+      // ── 修正2：送出後直接顯示訂單總覽畫面 ──
       setStep("done");
     } catch (e) { showToast("送出失敗，請重試"); }
     setSubmitting(false);
@@ -252,27 +280,27 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     </div>
   );
 
-  // ── DONE 結束畫面 ────────────────────────────────────────────────
+  // ── DONE：訂單總覽畫面（含修改/刪除）────────────────────────────
   if (step === "done" && finalOrder) {
     return (
       <div className="page">
         <div className="top-bar"><div className="logo-mark">🍱</div><h1>午餐快點</h1></div>
 
+        {/* 成功提示 */}
         <div style={{ textAlign: "center", padding: "24px 0 16px" }}>
-          <div style={{ fontSize: 60, marginBottom: 10 }}>✅</div>
+          <div style={{ fontSize: 56, marginBottom: 10 }}>✅</div>
           <h2 style={{ fontSize: 22, fontWeight: 800 }}>點餐成功！</h2>
           <p style={{ color: "var(--text2)", fontSize: 14, marginTop: 6 }}>
             {finalOrder.userName}，記得向發起人繳費喔 💰
           </p>
         </div>
 
-        {/* 訂單明細 */}
+        {/* 訂單總覽 */}
         <div className="card">
-          <div className="card-title">📋 我的訂單明細</div>
-
+          <div className="card-title">📋 我的訂單總覽</div>
           {finalOrder.foodItems.length > 0 && (
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 8, textTransform: "uppercase" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 8 }}>
                 🍱 {session.restaurantName}
               </div>
               {finalOrder.foodItems.map((item, i) => (
@@ -283,10 +311,9 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
               ))}
             </div>
           )}
-
           {finalOrder.drinkItems.length > 0 && (
             <div style={{ marginTop: finalOrder.foodItems.length > 0 ? 10 : 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--purple)", marginBottom: 8, textTransform: "uppercase" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--purple)", marginBottom: 8 }}>
                 🧋 {session.drinkName}
               </div>
               {finalOrder.drinkItems.map((item, i) => (
@@ -302,13 +329,11 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
               ))}
             </div>
           )}
-
           {note && (
             <div style={{ fontSize: 12, color: "var(--text2)", background: "var(--bg)", padding: "7px 10px", borderRadius: 6, marginTop: 10 }}>
               📝 備註：{note}
             </div>
           )}
-
           <div className="price-total">
             <span className="label">合計</span>
             <span className="amount">$ {finalOrder.total}</span>
@@ -322,8 +347,48 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
           </div>
         </div>
 
+        {/* ── 修改 / 刪除按鈕 ── */}
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button
+            className="btn"
+            onClick={editOrder}
+            style={{
+              flex: 1,
+              background: "#F59E0B",
+              color: "white",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              padding: "14px",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer"
+            }}
+          >
+            ✏️ 修改訂單
+          </button>
+          <button
+            className="btn"
+            onClick={deleteOrder}
+            disabled={deleting}
+            style={{
+              flex: 1,
+              background: "#EF4444",
+              color: "white",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              padding: "14px",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              opacity: deleting ? 0.6 : 1
+            }}
+          >
+            {deleting ? "刪除中..." : "🗑️ 刪除訂單"}
+          </button>
+        </div>
+
         {/* 繼續點下一份 */}
-        <div className="card" style={{ background: "var(--bg2)", textAlign: "center" }}>
+        <div className="card" style={{ background: "var(--bg2)", textAlign: "center", marginTop: 8 }}>
           <p style={{ fontSize: 14, color: "var(--text2)", marginBottom: 14 }}>
             若想繼續點下一份餐，請按下方按鈕
           </p>
@@ -331,12 +396,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
             🍽️ 繼續點下一份
           </button>
         </div>
-
-        {/* 查詢修改 */}
-        <button className="btn btn-secondary" style={{ marginTop: 4 }}
-          onClick={() => navigate("myorder", sessionId, userId || localStorage.getItem("lunch_uid"))}>
-          📋 查詢 / 修改我的訂單
-        </button>
 
         <Toast msg={toast} />
       </div>
@@ -375,7 +434,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   if (step === "food") {
     const { groups, uncategorized } = groupByCategory(session.menuItems || []);
     const hasCats = Object.keys(groups).length > 0;
-
     const MenuItemRow = ({ item }) => {
       const qty = foodSelections[item.name] || 0;
       return (
@@ -392,7 +450,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
         </div>
       );
     };
-
     return (
       <div className="page">
         <div className="top-bar">
@@ -400,7 +457,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
           <h1>{session.restaurantName}</h1>
           <span style={{ fontSize: 13, color: "var(--text2)" }}>{userName}</span>
         </div>
-
         {hasCats ? (
           <>
             {Object.entries(groups).map(([cat, items]) => (
@@ -432,13 +488,11 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
             {(session.menuItems || []).map((item, i) => <MenuItemRow key={i} item={item} />)}
           </>
         )}
-
         <div className="field" style={{ marginTop: 16 }}>
           <label>訂單備註（選填）</label>
           <textarea placeholder="例如：不要飯、半飯、少辣…"
             value={note} onChange={e => setNote(e.target.value)} style={{ minHeight: 60 }} />
         </div>
-
         <button className="btn btn-primary"
           onClick={() => session.drinkName ? setStep("drink") : setStep("confirm")}>
           {session.drinkName ? "下一步：選飲料 →" : "確認訂單 →"}
