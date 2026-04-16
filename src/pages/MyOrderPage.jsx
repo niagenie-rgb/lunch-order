@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  doc, getDoc, collection, query, where, getDocs, onSnapshot
+  doc, getDoc, collection, query, where, getDocs, onSnapshot, deleteDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -8,32 +8,42 @@ export default function MyOrderPage({ navigate, sessionId, userId }) {
   const [session, setSession] = useState(null);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!sessionId || !userId) { setLoading(false); return; }
-
     (async () => {
       const sessSnap = await getDoc(doc(db, "sessions", sessionId));
       if (sessSnap.exists()) setSession({ id: sessSnap.id, ...sessSnap.data() });
     })();
-
     const q = query(
       collection(db, "sessions", sessionId, "orders"),
       where("userId", "==", userId)
     );
-
     const unsub = onSnapshot(q, (snap) => {
       if (!snap.empty) {
         setOrder({ id: snap.docs[0].id, ...snap.docs[0].data() });
+      } else {
+        setOrder(null);
       }
       setLoading(false);
     });
-
     return () => unsub();
   }, [sessionId, userId]);
 
-  if (loading) return <div className="loading">載入中...</div>;
+  const deleteOrder = async () => {
+    if (!window.confirm("確定要刪除這筆訂單嗎？")) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, "sessions", sessionId, "orders", order.id));
+      // onSnapshot 會自動更新 order 為 null，觸發「找不到訂單」畫面
+    } catch (e) {
+      alert("刪除失敗，請重試");
+    }
+    setDeleting(false);
+  };
 
+  if (loading) return <div className="loading">載入中...</div>;
   if (!order) return (
     <div className="page">
       <div className="top-bar">
@@ -54,7 +64,6 @@ export default function MyOrderPage({ navigate, sessionId, userId }) {
 
   const isClosed = session?.status === "closed";
   const canEdit = !isClosed;
-
   const foodTotal = (order.foodItems || []).reduce((s, i) => s + i.price * i.qty, 0);
   const drinkTotal = (order.drinkItems || []).reduce((s, i) => s + i.price * i.qty, 0);
   const total = foodTotal + drinkTotal;
@@ -120,13 +129,36 @@ export default function MyOrderPage({ navigate, sessionId, userId }) {
         </div>
       )}
 
+      {/* 修改 / 刪除按鈕 */}
       {canEdit && (
-        <button
-          className="btn btn-outline"
-          onClick={() => navigate("order", sessionId, userId)}
-        >
-          ✏️ 修改訂單
-        </button>
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button
+            className="btn btn-outline"
+            style={{ flex: 1 }}
+            onClick={() => navigate("order", sessionId, userId)}
+          >
+            ✏️ 修改訂單
+          </button>
+          <button
+            className="btn"
+            onClick={deleteOrder}
+            disabled={deleting}
+            style={{
+              flex: 1,
+              background: "#EF4444",
+              color: "white",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              padding: "12px",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              opacity: deleting ? 0.6 : 1
+            }}
+          >
+            {deleting ? "刪除中..." : "🗑️ 刪除訂單"}
+          </button>
+        </div>
       )}
     </div>
   );
