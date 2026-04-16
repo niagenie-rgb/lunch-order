@@ -264,9 +264,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       setUserId(uid);
       localStorage.setItem("lunch_uid", uid);
       localStorage.setItem("lunch_session", sessionId);
-      setFinalOrder({ foodItems, drinkItems, total, userName });
-      // ── 修正2：送出後直接顯示訂單總覽畫面 ──
-      setStep("done");
+      navigate("myorder", sessionId, uid);
     } catch (e) { showToast("送出失敗，請重試"); }
     setSubmitting(false);
   };
