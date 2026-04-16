@@ -33,6 +33,9 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [orders, setOrders] = useState([]);
   const [shareLink, setShareLink] = useState("");
 
+  // ★ 新增：飲料未達標狀態
+  const [drinkExcluded, setDrinkExcluded] = useState(false);
+
   useEffect(() => {
     getDocs(collection(db, "restaurants")).then(snap => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -133,6 +136,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     setTimeout(() => navigate("history"), 1000);
   };
 
+  // ★ getSummary 加入 drinkExcluded 參數，排除飲料時不計入 drinks 和 total
   const getSummary = () => {
     const foodMap = {}, drinkMap = {};
     let total = 0;
@@ -141,10 +145,12 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         if (!foodMap[item.name]) foodMap[item.name] = { name: item.name, price: item.price, qty: 0 };
         foodMap[item.name].qty += item.qty; total += item.price * item.qty;
       });
-      (o.drinkItems || []).forEach(item => {
-        if (!drinkMap[item.name]) drinkMap[item.name] = { name: item.name, price: item.price, qty: 0 };
-        drinkMap[item.name].qty += item.qty; total += item.price * item.qty;
-      });
+      if (!drinkExcluded) {
+        (o.drinkItems || []).forEach(item => {
+          if (!drinkMap[item.name]) drinkMap[item.name] = { name: item.name, price: item.price, qty: 0 };
+          drinkMap[item.name].qty += item.qty; total += item.price * item.qty;
+        });
+      }
     });
     return { food: Object.values(foodMap), drinks: Object.values(drinkMap), total };
   };
@@ -319,16 +325,23 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           ) : (
             orders.map(order => {
+              // ★ 若飲料未達標，每人費用只計算餐點
               const personTotal =
                 (order.foodItems || []).reduce((s, i) => s + i.price * i.qty, 0) +
-                (order.drinkItems || []).reduce((s, i) => s + i.price * i.qty, 0);
+                (drinkExcluded ? 0 : (order.drinkItems || []).reduce((s, i) => s + i.price * i.qty, 0));
               return (
                 <div key={order.id} className="card">
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                     <div className="person-avatar">{(order.userName || "？")[0]}</div>
                     <div style={{ flex: 1 }}>
                       <div className="person-name">{order.userName || "匿名"}</div>
-                      <div className="person-items">{[...(order.foodItems||[]), ...(order.drinkItems||[])].map(i => `${i.name}×${i.qty}`).join("、")}</div>
+                      {/* ★ 若飲料未達標，品項列表也排除飲料 */}
+                      <div className="person-items">
+                        {[
+                          ...(order.foodItems || []),
+                          ...(drinkExcluded ? [] : (order.drinkItems || []))
+                        ].map(i => `${i.name}×${i.qty}`).join("、")}
+                      </div>
                     </div>
                     <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 16 }}>$ {personTotal}</div>
                   </div>
@@ -377,7 +390,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             {summary?.food.length === 0
               ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無餐點訂單</p>
               : summary?.food.map((item, i) => {
-                // Find who ordered this item and their notes
                 const orderers = orders.filter(o =>
                   (o.foodItems || []).some(fi => fi.name === item.name)
                 ).map(o => ({ name: o.userName, qty: (o.foodItems || []).find(fi => fi.name === item.name)?.qty || 0, note: o.note }));
@@ -404,52 +416,99 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               })
             }
           </div>
+
           {session?.drinkName && (
             <div className="card">
-              <div className="card-title">🧋 飲料點餐清單（{session?.drinkName}）</div>
-              {(session?.drinkPhone || session?.drinkAddress) && (
-                <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg2)", borderRadius: 8 }}>
-                  {session?.drinkPhone && <div style={{ fontSize: 13, marginBottom: 3 }}>📞 <a href={`tel:${session.drinkPhone}`} style={{ color: "var(--purple)", fontWeight: 600 }}>{session.drinkPhone}</a></div>}
-                  {session?.drinkAddress && <div style={{ fontSize: 12, color: "var(--text2)" }}>📍 {session.drinkAddress}</div>}
-                  {session?.drinkNote && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🛵 {session.drinkNote}</div>}
+              {/* ★ 飲料標題列：加入未達標按鈕 */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div className="card-title" style={{ marginBottom: 0 }}>🧋 飲料點餐清單（{session?.drinkName}）</div>
+                <button
+                  onClick={() => setDrinkExcluded(prev => !prev)}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: 20,
+                    border: drinkExcluded ? "1.5px solid var(--red)" : "1.5px solid var(--border)",
+                    background: drinkExcluded ? "var(--red-bg, #fff0f0)" : "transparent",
+                    color: drinkExcluded ? "var(--red)" : "var(--text3)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {drinkExcluded ? "❌ 未達標（已排除）" : "未達標"}
+                </button>
+              </div>
+
+              {/* ★ 未達標時顯示提示，達標時正常顯示飲料清單 */}
+              {drinkExcluded ? (
+                <div style={{
+                  padding: "12px 14px",
+                  background: "var(--red-bg, #fff0f0)",
+                  border: "1px solid var(--red)",
+                  borderRadius: 8,
+                  color: "var(--red)",
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}>
+                  飲料未達訂購門檻，已從統計與收款中排除。
                 </div>
-              )}
-              {summary?.drinks.length === 0
-                ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無飲料訂單</p>
-                : (() => {
-                  // For drinks, show each person's order individually (with sugar/ice)
-                  const drinkOrders = [];
-                  orders.forEach(o => {
-                    (o.drinkItems || []).forEach(item => {
-                      drinkOrders.push({ userName: o.userName, ...item, note: o.note });
-                    });
-                  });
-                  return drinkOrders.map((item, i) => (
-                    <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <span style={{ fontWeight: 600 }}>{item.name}</span>
-                          <span style={{ fontSize: 12, color: "var(--text2)", marginLeft: 6 }}>（{item.userName}）</span>
-                        </div>
-                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                          <span className="badge badge-gray">× {item.qty}</span>
-                          <span style={{ color: "var(--purple)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
-                        </div>
-                      </div>
-                      {(item.sugar || item.ice) && (
-                        <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3, paddingLeft: 4 }}>
-                          🍬 {item.sugar || "-"}　🧊 {item.ice || "-"}
-                        </div>
-                      )}
+              ) : (
+                <>
+                  {(session?.drinkPhone || session?.drinkAddress) && (
+                    <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg2)", borderRadius: 8 }}>
+                      {session?.drinkPhone && <div style={{ fontSize: 13, marginBottom: 3 }}>📞 <a href={`tel:${session.drinkPhone}`} style={{ color: "var(--purple)", fontWeight: 600 }}>{session.drinkPhone}</a></div>}
+                      {session?.drinkAddress && <div style={{ fontSize: 12, color: "var(--text2)" }}>📍 {session.drinkAddress}</div>}
+                      {session?.drinkNote && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🛵 {session.drinkNote}</div>}
                     </div>
-                  ));
-                })()
-              }
+                  )}
+                  {summary?.drinks.length === 0
+                    ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無飲料訂單</p>
+                    : (() => {
+                      const drinkOrders = [];
+                      orders.forEach(o => {
+                        (o.drinkItems || []).forEach(item => {
+                          drinkOrders.push({ userName: o.userName, ...item, note: o.note });
+                        });
+                      });
+                      return drinkOrders.map((item, i) => (
+                        <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <span style={{ fontWeight: 600 }}>{item.name}</span>
+                              <span style={{ fontSize: 12, color: "var(--text2)", marginLeft: 6 }}>（{item.userName}）</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                              <span className="badge badge-gray">× {item.qty}</span>
+                              <span style={{ color: "var(--purple)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
+                            </div>
+                          </div>
+                          {(item.sugar || item.ice) && (
+                            <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3, paddingLeft: 4 }}>
+                              🍬 {item.sugar || "-"}　🧊 {item.ice || "-"}
+                            </div>
+                          )}
+                        </div>
+                      ));
+                    })()
+                  }
+                </>
+              )}
             </div>
           )}
+
           <div className="card" style={{ background: "var(--bg2)" }}>
             <div className="price-total">
-              <span className="label">💰 全部合計</span>
+              {/* ★ 未達標時在合計旁顯示提示 */}
+              <span className="label">
+                💰 全部合計
+                {drinkExcluded && (
+                  <span style={{ fontSize: 11, color: "var(--red)", marginLeft: 6, fontWeight: 500 }}>
+                    （飲料未計入）
+                  </span>
+                )}
+              </span>
               <span className="amount">$ {summary?.total || 0}</span>
             </div>
           </div>
