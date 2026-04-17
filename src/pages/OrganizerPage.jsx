@@ -1,18 +1,15 @@
 import { useState, useEffect } from "react";
 import {
   collection, addDoc, doc, onSnapshot,
-  updateDoc, serverTimestamp, getDocs
+  updateDoc, serverTimestamp, getDocs, deleteField
 } from "firebase/firestore";
 import { db } from "../firebase";
-
 function Toast({ msg }) {
   return msg ? <div className="toast">{msg}</div> : null;
 }
-
 export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [tab, setTab] = useState(sessionId ? "manage" : "setup");
   const [toast, setToast] = useState("");
-
   const [allRestaurants, setAllRestaurants] = useState([]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [selectedFoodId, setSelectedFoodId] = useState("");
@@ -28,14 +25,10 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [newDrinkName, setNewDrinkName] = useState("");
   const [newDrinkPrice, setNewDrinkPrice] = useState("");
   const [creating, setCreating] = useState(false);
-
   const [session, setSession] = useState(null);
   const [orders, setOrders] = useState([]);
   const [shareLink, setShareLink] = useState("");
-
-  // ★ 新增：飲料未達標狀態
   const [drinkExcluded, setDrinkExcluded] = useState(false);
-
   useEffect(() => {
     getDocs(collection(db, "restaurants")).then(snap => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -43,7 +36,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setAllRestaurants(list);
     });
   }, []);
-
   useEffect(() => {
     if (!sessionId) return;
     const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
@@ -56,9 +48,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     });
     return () => { unsub(); unsubOrders(); };
   }, [sessionId]);
-
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
-
   const onSelectFood = (id) => {
     setSelectedFoodId(id);
     if (!id || id === "__manual__") {
@@ -73,7 +63,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setSelectedFoodInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
   };
-
   const onSelectDrink = (id) => {
     setSelectedDrinkId(id);
     if (!id || id === "__manual__") { setDrinkName(""); setDrinkItems([]); return; }
@@ -84,19 +73,16 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setSelectedDrinkInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
   };
-
   const addMenuItem = () => {
     if (!newItemName || !newItemPrice) return;
     setMenuItems([...menuItems, { name: newItemName, price: Number(newItemPrice) }]);
     setNewItemName(""); setNewItemPrice("");
   };
-
   const addDrinkItem = () => {
     if (!newDrinkName || !newDrinkPrice) return;
     setDrinkItems([...drinkItems, { name: newDrinkName, price: Number(newDrinkPrice) }]);
     setNewDrinkName(""); setNewDrinkPrice("");
   };
-
   const createSession = async () => {
     if (!restaurantName) { showToast("請選擇或輸入餐廳名稱"); return; }
     if (menuItems.length === 0) { showToast("餐點菜單至少要有一個品項"); return; }
@@ -122,21 +108,26 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     } catch (e) { showToast("建立失敗，請重試"); }
     setCreating(false);
   };
-
   const copyLink = () => { navigator.clipboard.writeText(shareLink); showToast("🔗 連結已複製！"); };
-
   const togglePaid = async (orderId, current) => {
     await updateDoc(doc(db, "sessions", sessionId, "orders", orderId), { paid: !current });
   };
-
   const closeSession = async () => {
-    if (!window.confirm("確定要結單嗎？結單後無法修改。")) return;
+    if (!window.confirm("確定要結單嗎？結單後可以從這裡叫回重新開啟。")) return;
     await updateDoc(doc(db, "sessions", sessionId), { status: "closed", closedAt: serverTimestamp() });
     showToast("✅ 已結單！");
     setTimeout(() => navigate("history"), 1000);
   };
-
-  // ★ getSummary 加入 drinkExcluded 參數，排除飲料時不計入 drinks 和 total
+  // ▼▼▼ 新增：重新開啟已結單的訂單 ▼▼▼
+  const reopenSession = async () => {
+    if (!window.confirm("確定要重新開啟這筆訂單嗎？")) return;
+    await updateDoc(doc(db, "sessions", sessionId), {
+      status: "open",
+      closedAt: deleteField(),
+    });
+    showToast("🔓 訂單已重新開啟！");
+  };
+  // ▲▲▲ 新增結束 ▲▲▲
   const getSummary = () => {
     const foodMap = {}, drinkMap = {};
     let total = 0;
@@ -154,12 +145,10 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     });
     return { food: Object.values(foodMap), drinks: Object.values(drinkMap), total };
   };
-
   const summary = session ? getSummary() : null;
   const isClosed = session?.status === "closed";
   const foodRestaurants = allRestaurants.filter(r => r.type === "food");
   const drinkRestaurants = allRestaurants.filter(r => r.type === "drink");
-
   // ========== SETUP ==========
   if (tab === "setup" || !sessionId) {
     return (
@@ -169,7 +158,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           <h1>建立今日訂單</h1>
           <button className="btn btn-secondary btn-sm" onClick={() => navigate("menumanager")}>📋 菜單庫</button>
         </div>
-
         <div className="card">
           <div className="card-title">基本資訊</div>
           <div className="field">
@@ -177,7 +165,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
         </div>
-
         {/* Food picker */}
         <div className="card">
           <div className="card-title">選擇餐廳</div>
@@ -197,14 +184,12 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               💡 點右上角「菜單庫」先建立常用餐廳，以後選餐廳會更快！
             </div>
           )}
-
           {(selectedFoodId === "__manual__" || foodRestaurants.length === 0) && (
             <div className="field">
               <label>餐廳名稱</label>
               <input placeholder="例：大碗公自助餐" value={restaurantName} onChange={e => setRestaurantName(e.target.value)} />
             </div>
           )}
-
           {restaurantName && (
             <div style={{ marginTop: 8 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>菜單品項</div>
@@ -224,7 +209,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
         </div>
-
         {/* Drink picker */}
         <div className="card">
           <div className="card-title">選擇飲料店（選填）</div>
@@ -245,14 +229,12 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               <input placeholder="例：50嵐、清心" value={drinkName} onChange={e => setDrinkName(e.target.value)} />
             </div>
           )}
-
           {selectedDrinkId === "__manual__" && (
             <div className="field">
               <label>飲料店名稱</label>
               <input placeholder="例：50嵐" value={drinkName} onChange={e => setDrinkName(e.target.value)} />
             </div>
           )}
-
           {drinkName && (
             <div style={{ marginTop: 8 }}>
               <div className="card-title" style={{ marginBottom: 8 }}>飲料品項</div>
@@ -272,7 +254,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
         </div>
-
         <button className="btn btn-primary" onClick={createSession} disabled={creating}>
           {creating ? "建立中..." : "🚀 產生點餐連結"}
         </button>
@@ -280,7 +261,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       </div>
     );
   }
-
   // ========== MANAGE ==========
   return (
     <div className="page-wide">
@@ -292,13 +272,11 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         </h1>
         {isClosed ? <span className="badge badge-gray">已結單</span> : <span className="badge badge-green">進行中</span>}
       </div>
-
       <div className="tab-bar">
         <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}>📋 訂單總覽</button>
         <button className={`tab-btn ${tab === "summary" ? "active" : ""}`} onClick={() => setTab("summary")}>🛒 匯整點餐</button>
         <button className={`tab-btn ${tab === "share" ? "active" : ""}`} onClick={() => setTab("share")}>🔗 分享連結</button>
       </div>
-
       {tab === "share" && (
         <div>
           <div className="card">
@@ -314,7 +292,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           </div>
         </div>
       )}
-
       {tab === "manage" && (
         <div>
           {orders.length === 0 ? (
@@ -325,7 +302,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           ) : (
             orders.map(order => {
-              // ★ 若飲料未達標，每人費用只計算餐點
               const personTotal =
                 (order.foodItems || []).reduce((s, i) => s + i.price * i.qty, 0) +
                 (drinkExcluded ? 0 : (order.drinkItems || []).reduce((s, i) => s + i.price * i.qty, 0));
@@ -335,7 +311,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                     <div className="person-avatar">{(order.userName || "？")[0]}</div>
                     <div style={{ flex: 1 }}>
                       <div className="person-name">{order.userName || "匿名"}</div>
-                      {/* ★ 若飲料未達標，品項列表也排除飲料 */}
                       <div className="person-items">
                         {[
                           ...(order.foodItems || []),
@@ -363,6 +338,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               );
             })
           )}
+          {/* ▼▼▼ 改動處：進行中顯示結單，已結單顯示重新開啟 ▼▼▼ */}
           {orders.length > 0 && !isClosed && (
             <div style={{ marginTop: 20 }}>
               <hr className="divider" />
@@ -373,9 +349,24 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               <button className="btn btn-green" onClick={closeSession}>🎉 完成訂餐・結單</button>
             </div>
           )}
+          {isClosed && (
+            <div style={{ marginTop: 20 }}>
+              <hr className="divider" />
+              <div style={{ marginBottom: 10, fontSize: 13, color: "var(--text2)", textAlign: "center" }}>
+                此訂單已結單。若需修改，可重新開啟。
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={reopenSession}
+                style={{ width: "100%", border: "1.5px solid var(--amber)", color: "var(--amber)", background: "var(--amber-bg)" }}
+              >
+                🔓 重新開啟訂單
+              </button>
+            </div>
+          )}
+          {/* ▲▲▲ 改動結束 ▲▲▲ */}
         </div>
       )}
-
       {tab === "summary" && (
         <div>
           <div className="card">
@@ -416,10 +407,8 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               })
             }
           </div>
-
           {session?.drinkName && (
             <div className="card">
-              {/* ★ 飲料標題列：加入未達標按鈕 */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div className="card-title" style={{ marginBottom: 0 }}>🧋 飲料點餐清單（{session?.drinkName}）</div>
                 <button
@@ -440,8 +429,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                   {drinkExcluded ? "❌ 未達標（已排除）" : "未達標"}
                 </button>
               </div>
-
-              {/* ★ 未達標時顯示提示，達標時正常顯示飲料清單 */}
               {drinkExcluded ? (
                 <div style={{
                   padding: "12px 14px",
@@ -497,10 +484,8 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               )}
             </div>
           )}
-
           <div className="card" style={{ background: "var(--bg2)" }}>
             <div className="price-total">
-              {/* ★ 未達標時在合計旁顯示提示 */}
               <span className="label">
                 💰 全部合計
                 {drinkExcluded && (
@@ -514,7 +499,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           </div>
         </div>
       )}
-
       <Toast msg={toast} />
     </div>
   );
