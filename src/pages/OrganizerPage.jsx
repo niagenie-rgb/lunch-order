@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   collection, addDoc, doc, onSnapshot,
-  updateDoc, serverTimestamp, getDocs, deleteField
+  updateDoc, serverTimestamp, getDocs
 } from "firebase/firestore";
 import { db } from "../firebase";
 function Toast({ msg }) {
@@ -112,22 +112,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const togglePaid = async (orderId, current) => {
     await updateDoc(doc(db, "sessions", sessionId, "orders", orderId), { paid: !current });
   };
-  const closeSession = async () => {
-    if (!window.confirm("確定要結單嗎？結單後可以從這裡叫回重新開啟。")) return;
-    await updateDoc(doc(db, "sessions", sessionId), { status: "closed", closedAt: serverTimestamp() });
-    showToast("✅ 已結單！");
-    setTimeout(() => navigate("history"), 1000);
-  };
-  // ▼▼▼ 新增：重新開啟已結單的訂單 ▼▼▼
-  const reopenSession = async () => {
-    if (!window.confirm("確定要重新開啟這筆訂單嗎？")) return;
-    await updateDoc(doc(db, "sessions", sessionId), {
-      status: "open",
-      closedAt: deleteField(),
-    });
-    showToast("🔓 訂單已重新開啟！");
-  };
-  // ▲▲▲ 新增結束 ▲▲▲
   const getSummary = () => {
     const foodMap = {}, drinkMap = {};
     let total = 0;
@@ -146,7 +130,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     return { food: Object.values(foodMap), drinks: Object.values(drinkMap), total };
   };
   const summary = session ? getSummary() : null;
-  const isClosed = session?.status === "closed";
   const foodRestaurants = allRestaurants.filter(r => r.type === "food");
   const drinkRestaurants = allRestaurants.filter(r => r.type === "drink");
   // ========== SETUP ==========
@@ -270,7 +253,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           {session?.restaurantName || "..."}
           <span style={{ fontSize: 13, fontWeight: 400, color: "var(--text2)", marginLeft: 8 }}>{session?.date}</span>
         </h1>
-        {isClosed ? <span className="badge badge-gray">已結單</span> : <span className="badge badge-green">進行中</span>}
+        <span className="badge badge-green">進行中</span>
       </div>
       <div className="tab-bar">
         <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}>📋 訂單總覽</button>
@@ -325,46 +308,25 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                       📝 備註：{order.note}
                     </div>
                   )}
-                  {!isClosed && (
-                    <label className="paid-toggle" onClick={() => togglePaid(order.id, order.paid)}>
-                      <div className={`toggle-switch ${order.paid ? "on" : ""}`} />
-                      <span style={{ fontSize: 13, color: order.paid ? "var(--green)" : "var(--text2)", fontWeight: 600 }}>
-                        {order.paid ? "✅ 已收款" : "⏳ 未收款"}
-                      </span>
-                    </label>
-                  )}
-                  {isClosed && <span className={`badge ${order.paid ? "badge-green" : "badge-red"}`}>{order.paid ? "已收款" : "未收款"}</span>}
+                  <label className="paid-toggle" onClick={() => togglePaid(order.id, order.paid)}>
+                    <div className={`toggle-switch ${order.paid ? "on" : ""}`} />
+                    <span style={{ fontSize: 13, color: order.paid ? "var(--green)" : "var(--text2)", fontWeight: 600 }}>
+                      {order.paid ? "✅ 已收款" : "⏳ 未收款"}
+                    </span>
+                  </label>
                 </div>
               );
             })
           )}
-          {/* ▼▼▼ 改動處：進行中顯示結單，已結單顯示重新開啟 ▼▼▼ */}
-          {orders.length > 0 && !isClosed && (
+          {orders.length > 0 && (
             <div style={{ marginTop: 20 }}>
               <hr className="divider" />
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, fontSize: 14, color: "var(--text2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)" }}>
                 <span>總人數：{orders.length} 人</span>
                 <span>總金額：<strong style={{ color: "var(--accent)" }}>$ {summary?.total || 0}</strong></span>
               </div>
-              <button className="btn btn-green" onClick={closeSession}>🎉 完成訂餐・結單</button>
             </div>
           )}
-          {isClosed && (
-            <div style={{ marginTop: 20 }}>
-              <hr className="divider" />
-              <div style={{ marginBottom: 10, fontSize: 13, color: "var(--text2)", textAlign: "center" }}>
-                此訂單已結單。若需修改，可重新開啟。
-              </div>
-              <button
-                className="btn btn-secondary"
-                onClick={reopenSession}
-                style={{ width: "100%", border: "1.5px solid var(--amber)", color: "var(--amber)", background: "var(--amber-bg)" }}
-              >
-                🔓 重新開啟訂單
-              </button>
-            </div>
-          )}
-          {/* ▲▲▲ 改動結束 ▲▲▲ */}
         </div>
       )}
       {tab === "summary" && (
