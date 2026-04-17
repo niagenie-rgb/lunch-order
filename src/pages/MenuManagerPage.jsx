@@ -4,13 +4,11 @@ import {
   doc, onSnapshot, serverTimestamp
 } from "firebase/firestore";
 import { db } from "../firebase";
-
 function Toast({ msg, type = "default" }) {
   if (!msg) return null;
   const bg = type === "success" ? "#2D9E6B" : type === "error" ? "#D63B3B" : "var(--text)";
   return <div className="toast" style={{ background: bg }}>{msg}</div>;
 }
-
 export default function MenuManagerPage({ navigate }) {
   const [restaurants, setRestaurants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +28,6 @@ export default function MenuManagerPage({ navigate }) {
   const [importStep, setImportStep] = useState("idle");
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, storeName: "" });
   const fileInputRef = useRef();
-
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "restaurants"), (snap) => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -40,12 +37,10 @@ export default function MenuManagerPage({ navigate }) {
     });
     return () => unsub();
   }, []);
-
   const showToast = (msg, type = "default") => {
     setToast({ msg, type });
     setTimeout(() => setToast({ msg: "", type: "default" }), 3000);
   };
-
   // ── Excel Import ─────────────────────────────────────────────────
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
@@ -75,7 +70,6 @@ export default function MenuManagerPage({ navigate }) {
         }
       }
       if (allRows.length === 0) { showToast("找不到有效資料，請確認 Excel 格式", "error"); setImporting(false); return; }
-
       const storeMap = {};
       for (const row of allRows) {
         const name = String(row.store_name || "").trim();
@@ -94,7 +88,6 @@ export default function MenuManagerPage({ navigate }) {
         if (!storeMap[name]) {
           storeMap[name] = { name, type: type === "drink" ? "drink" : "food", items: [] };
         }
-        // Update store-level info if present
         if (phone) storeMap[name].phone = phone;
         if (address) storeMap[name].address = address;
         if (deliveryNote) storeMap[name].deliveryNote = deliveryNote;;
@@ -124,7 +117,6 @@ export default function MenuManagerPage({ navigate }) {
     setImporting(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
-
   const confirmImport = async (mode = "new_only") => {
     if (!importPreview) return;
     setImportStep("importing");
@@ -184,14 +176,11 @@ export default function MenuManagerPage({ navigate }) {
       setImportStep("preview");
     }
   };
-
   const resetImport = () => { setImportStep("idle"); setImportPreview(null); };
-
   // ── Manual CRUD ───────────────────────────────────────────────────
   const [newPhone, setNewPhone] = useState("");
   const [newAddress, setNewAddress] = useState("");
   const [newDeliveryNote, setNewDeliveryNote] = useState("");
-
   const addRestaurant = async () => {
     if (!newName.trim()) { showToast("請輸入名稱", "error"); return; }
     setSaving(true);
@@ -204,21 +193,18 @@ export default function MenuManagerPage({ navigate }) {
     setShowAddForm(false); setSaving(false);
     showToast("✅ 新增成功！", "success");
   };
-
   const deleteRestaurant = async (id) => {
     if (!window.confirm("確定要刪除嗎？")) return;
     await deleteDoc(doc(db, "restaurants", id));
     if (editingId === id) setEditingId(null);
     showToast("已刪除");
   };
-
   const startEdit = (r) => {
     setEditingId(r.id);
     setEditItems([...(r.items || [])]);
     setEditInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     setNewItemName(""); setNewItemPrice(""); setNewItemCategory("");
   };
-
   const addItem = () => {
     if (!newItemName.trim() || !newItemPrice) { showToast("請填寫名稱和價格", "error"); return; }
     const item = { name: newItemName.trim(), price: Number(newItemPrice) };
@@ -226,9 +212,7 @@ export default function MenuManagerPage({ navigate }) {
     setEditItems([...editItems, item]);
     setNewItemName(""); setNewItemPrice(""); setNewItemCategory("");
   };
-
   const removeItem = (i) => setEditItems(editItems.filter((_, idx) => idx !== i));
-
   const moveItem = (i, dir) => {
     const arr = [...editItems];
     const j = i + dir;
@@ -236,11 +220,21 @@ export default function MenuManagerPage({ navigate }) {
     [arr[i], arr[j]] = [arr[j], arr[i]];
     setEditItems(arr);
   };
-
+  // ── 新增：更新單一品項價格 ─────────────────────────────────────────
+  const updateItemPrice = (i, val) => {
+    const arr = [...editItems];
+    arr[i] = { ...arr[i], price: val === "" ? "" : Number(val) };
+    setEditItems(arr);
+  };
   const saveItems = async () => {
     setSaving(true);
+    // 儲存前把空字串價格轉為 0
+    const itemsToSave = editItems.map(item => ({
+      ...item,
+      price: item.price === "" ? 0 : Number(item.price)
+    }));
     await updateDoc(doc(db, "restaurants", editingId), {
-      items: editItems,
+      items: itemsToSave,
       phone: editInfo.phone.trim(),
       address: editInfo.address.trim(),
       deliveryNote: editInfo.deliveryNote.trim(),
@@ -248,12 +242,9 @@ export default function MenuManagerPage({ navigate }) {
     setSaving(false); setEditingId(null);
     showToast("✅ 已儲存！", "success");
   };
-
   if (loading) return <div className="loading">載入中...</div>;
-
   const foodList = restaurants.filter(r => r.type === "food");
   const drinkList = restaurants.filter(r => r.type === "drink");
-
   // ── Import Preview ────────────────────────────────────────────────
   if (importStep === "preview" && importPreview) {
     const { stores, newStores, dupStores } = importPreview;
@@ -307,7 +298,6 @@ export default function MenuManagerPage({ navigate }) {
       </div>
     );
   }
-
   // ── Importing ─────────────────────────────────────────────────────
   if (importStep === "importing") {
     const pct = importProgress.total > 0 ? Math.round((importProgress.current / importProgress.total) * 100) : 0;
@@ -331,7 +321,6 @@ export default function MenuManagerPage({ navigate }) {
       </div>
     );
   }
-
   // ── Import Done ───────────────────────────────────────────────────
   if (importStep === "done" && importPreview) {
     const { added = 0, updated = 0, skipped = 0 } = importPreview;
@@ -348,7 +337,6 @@ export default function MenuManagerPage({ navigate }) {
       </div>
     );
   }
-
   // ── Main ──────────────────────────────────────────────────────────
   return (
     <div className="page">
@@ -357,7 +345,6 @@ export default function MenuManagerPage({ navigate }) {
         <h1>菜單庫管理</h1>
         <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddForm(true); setEditingId(null); }}>+ 新增</button>
       </div>
-
       {/* Excel Import */}
       <div className="card" style={{ background: "var(--purple-bg)", border: "1.5px solid #C4B5F5", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -373,7 +360,6 @@ export default function MenuManagerPage({ navigate }) {
         </div>
         <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={handleFileSelect} />
       </div>
-
       {/* Add Form */}
       {showAddForm && (
         <div className="card" style={{ border: "1.5px solid var(--accent)" }}>
@@ -407,7 +393,6 @@ export default function MenuManagerPage({ navigate }) {
           </div>
         </div>
       )}
-
       {/* Food List */}
       <div className="section-label">🍱 餐廳（{foodList.length} 間）</div>
       {foodList.length === 0 && <div className="empty" style={{ padding: "20px" }}><p>還沒有餐廳，點「選擇檔案」匯入 Excel</p></div>}
@@ -418,9 +403,9 @@ export default function MenuManagerPage({ navigate }) {
           setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice} setNewItemCategory={setNewItemCategory}
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
+          onUpdateItemPrice={updateItemPrice}
           onSave={saveItems} onCancel={() => setEditingId(null)} saving={saving} />
       ))}
-
       {/* Drink List */}
       <div className="section-label">🧋 飲料店（{drinkList.length} 間）</div>
       {drinkList.length === 0 && <div className="empty" style={{ padding: "20px" }}><p>還沒有飲料店，點「選擇檔案」匯入 Excel</p></div>}
@@ -431,19 +416,18 @@ export default function MenuManagerPage({ navigate }) {
           setNewItemName={setNewItemName} setNewItemPrice={setNewItemPrice} setNewItemCategory={setNewItemCategory}
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
+          onUpdateItemPrice={updateItemPrice}
           onSave={saveItems} onCancel={() => setEditingId(null)} saving={saving} />
       ))}
-
       <Toast msg={toast.msg} type={toast.type} />
     </div>
   );
 }
-
 function RestaurantCard({
   restaurant, isEditing, editItems, editInfo, setEditInfo,
   newItemName, newItemPrice, newItemCategory,
   setNewItemName, setNewItemPrice, setNewItemCategory,
-  onEdit, onDelete, onAddItem, onRemoveItem, onMoveItem, onSave, onCancel, saving
+  onEdit, onDelete, onAddItem, onRemoveItem, onMoveItem, onUpdateItemPrice, onSave, onCancel, saving
 }) {
   return (
     <div className="card" style={{ borderColor: isEditing ? "var(--accent)" : "var(--border)" }}>
@@ -465,7 +449,6 @@ function RestaurantCard({
           </div>
         )}
       </div>
-
       {/* View mode preview */}
       {!isEditing && (restaurant.items || []).length > 0 && (
         <div style={{ marginTop: 10, borderTop: "1px solid var(--bg2)", paddingTop: 10 }}>
@@ -483,7 +466,6 @@ function RestaurantCard({
           )}
         </div>
       )}
-
       {/* Edit mode */}
       {isEditing && (
         <div>
@@ -525,7 +507,6 @@ function RestaurantCard({
               />
             </div>
           </div>
-
           {editItems.length === 0
             ? <p style={{ color: "var(--text3)", fontSize: 13, marginBottom: 12 }}>還沒有品項，從下方新增</p>
             : (
@@ -540,15 +521,30 @@ function RestaurantCard({
                       <div style={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
                       {item.category && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>{item.category}</div>}
                     </div>
-                    <span className="badge badge-amber" style={{ fontSize: 12, flexShrink: 0 }}>$ {item.price}</span>
+                    {/* ▼▼▼ 改動處：價格改為可編輯 input ▼▼▼ */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                      <span style={{ fontSize: 13, color: "var(--text3)" }}>$</span>
+                      <input
+                        type="number"
+                        value={item.price}
+                        onChange={e => onUpdateItemPrice(i, e.target.value)}
+                        style={{
+                          width: 64, padding: "4px 7px",
+                          border: "1.5px solid var(--border)", borderRadius: 6,
+                          fontSize: 13, fontFamily: "inherit",
+                          background: "var(--card)", color: "var(--text)",
+                          textAlign: "right"
+                        }}
+                      />
+                    </div>
+                    {/* ▲▲▲ 改動結束 ▲▲▲ */}
                     <button onClick={() => onRemoveItem(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: 16, padding: "0 4px", flexShrink: 0 }}>✕</button>
                   </div>
                 ))}
               </div>
             )
           }
-
-          {/* Add item form - stacked layout to prevent overflow */}
+          {/* Add item form */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input
@@ -574,7 +570,6 @@ function RestaurantCard({
               <button className="btn btn-secondary btn-sm" onClick={onAddItem} style={{ flexShrink: 0, whiteSpace: "nowrap" }}>+ 新增</button>
             </div>
           </div>
-
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-primary" style={{ flex: 2 }} onClick={onSave} disabled={saving}>{saving ? "儲存中..." : "💾 儲存菜單"}</button>
             <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onCancel}>取消</button>
