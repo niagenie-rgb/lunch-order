@@ -9,7 +9,6 @@ function Toast({ msg }) {
   return msg ? <div className="toast">{msg}</div> : null;
 }
 
-// ===== 編輯訂單 Modal =====
 function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
   const [foodItems, setFoodItems] = useState(
     (session?.menuItems || []).map(mi => {
@@ -20,12 +19,7 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
   const [drinkItems, setDrinkItems] = useState(
     (session?.drinkItems || []).map(di => {
       const existing = (order.drinkItems || []).find(d => d.name === di.name);
-      return {
-        ...di,
-        qty: existing?.qty || 0,
-        sugar: existing?.sugar || "",
-        ice: existing?.ice || "",
-      };
+      return { ...di, qty: existing?.qty || 0, sugar: existing?.sugar || "", ice: existing?.ice || "" };
     })
   );
   const [note, setNote] = useState(order.note || "");
@@ -71,7 +65,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 17 }}>$ {personTotal}</div>
         </div>
 
-        {/* 餐點 */}
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
             🍱 {session?.restaurantName}
@@ -91,7 +84,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           ))}
         </div>
 
-        {/* 飲料 */}
         {session?.drinkName && !drinkExcluded && drinkItems.length > 0 && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
@@ -133,7 +125,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           </div>
         )}
 
-        {/* 備註 */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 6 }}>📝 備註</div>
           <input
@@ -285,20 +276,22 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
 
   const getSummary = () => {
     const foodMap = {}, drinkMap = {};
-    let total = 0;
+    let foodTotal = 0, drinkTotal = 0;
     orders.forEach(o => {
       (o.foodItems || []).forEach(item => {
         if (!foodMap[item.name]) foodMap[item.name] = { name: item.name, price: item.price, qty: 0 };
-        foodMap[item.name].qty += item.qty; total += item.price * item.qty;
+        foodMap[item.name].qty += item.qty;
+        foodTotal += item.price * item.qty;
       });
       if (!drinkExcluded) {
         (o.drinkItems || []).forEach(item => {
           if (!drinkMap[item.name]) drinkMap[item.name] = { name: item.name, price: item.price, qty: 0 };
-          drinkMap[item.name].qty += item.qty; total += item.price * item.qty;
+          drinkMap[item.name].qty += item.qty;
+          drinkTotal += item.price * item.qty;
         });
       }
     });
-    return { food: Object.values(foodMap), drinks: Object.values(drinkMap), total };
+    return { food: Object.values(foodMap), drinks: Object.values(drinkMap), foodTotal, drinkTotal, total: foodTotal + drinkTotal };
   };
 
   const summary = session ? getSummary() : null;
@@ -477,14 +470,11 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                     </div>
                     <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 16 }}>$ {personTotal}</div>
                   </div>
-
                   {order.note && (
                     <div style={{ fontSize: 12, color: "var(--text2)", background: "var(--bg)", padding: "6px 10px", borderRadius: 6, marginBottom: 10 }}>
                       📝 備註：{order.note}
                     </div>
                   )}
-
-                  {/* 操作列：收款 + 修改 + 刪除 */}
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <label className="paid-toggle" style={{ flex: 1 }} onClick={() => togglePaid(order.id, order.paid)}>
                       <div className={`toggle-switch ${order.paid ? "on" : ""}`} />
@@ -494,22 +484,12 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                     </label>
                     <button
                       onClick={() => setEditingOrder(order)}
-                      style={{
-                        padding: "5px 13px", borderRadius: 8,
-                        border: "1.5px solid var(--border)", background: "none",
-                        fontSize: 13, cursor: "pointer", color: "var(--text2)", fontWeight: 600,
-                        whiteSpace: "nowrap"
-                      }}>
+                      style={{ padding: "5px 13px", borderRadius: 8, border: "1.5px solid var(--border)", background: "none", fontSize: 13, cursor: "pointer", color: "var(--text2)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       ✏️ 修改
                     </button>
                     <button
                       onClick={() => deleteOrder(order.id, order.userName)}
-                      style={{
-                        padding: "5px 13px", borderRadius: 8,
-                        border: "1.5px solid var(--red)", background: "none",
-                        fontSize: 13, cursor: "pointer", color: "var(--red)", fontWeight: 600,
-                        whiteSpace: "nowrap"
-                      }}>
+                      style={{ padding: "5px 13px", borderRadius: 8, border: "1.5px solid var(--red)", background: "none", fontSize: 13, cursor: "pointer", color: "var(--red)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       🗑️ 刪除
                     </button>
                   </div>
@@ -569,6 +549,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               })
             }
           </div>
+
           {session?.drinkName && (
             <div className="card">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -632,21 +613,36 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               )}
             </div>
           )}
+
+          {/* 合計卡片：餐點＋飲料分開顯示 */}
           <div className="card" style={{ background: "var(--bg2)" }}>
-            <div className="price-total">
-              <span className="label">
-                💰 全部合計
-                {drinkExcluded && (
-                  <span style={{ fontSize: 11, color: "var(--red)", marginLeft: 6, fontWeight: 500 }}>（飲料未計入）</span>
-                )}
-              </span>
-              <span className="amount">$ {summary?.total || 0}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginBottom: 8 }}>
+              <span>🍱 餐點小計</span>
+              <span style={{ fontWeight: 600, color: "var(--accent)" }}>$ {summary?.foodTotal || 0}</span>
+            </div>
+            {session?.drinkName && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginBottom: 12 }}>
+                <span>
+                  🧋 飲料小計
+                  {drinkExcluded && (
+                    <span style={{ fontSize: 11, color: "var(--red)", marginLeft: 6 }}>（未計入）</span>
+                  )}
+                </span>
+                <span style={{ fontWeight: 600, color: drinkExcluded ? "var(--text3)" : "var(--purple, #7c3aed)", textDecoration: drinkExcluded ? "line-through" : "none" }}>
+                  $ {orders.reduce((s, o) => s + (o.drinkItems || []).reduce((ss, i) => ss + i.price * i.qty, 0), 0)}
+                </span>
+              </div>
+            )}
+            <div style={{ borderTop: "1.5px solid var(--border)", paddingTop: 10 }}>
+              <div className="price-total">
+                <span className="label">💰 全部合計</span>
+                <span className="amount">$ {summary?.total || 0}</span>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 編輯 Modal */}
       {editingOrder && (
         <EditOrderModal
           order={editingOrder}
