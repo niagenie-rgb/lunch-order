@@ -10,19 +10,37 @@ function Toast({ msg }) {
 }
 
 function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
-  const [foodItems, setFoodItems] = useState(
+  const parseOptions = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    return String(val).split(",").map(s => s.trim()).filter(Boolean);
+  };
+
+  const initFood = () =>
     (session?.menuItems || []).map(mi => {
       const existing = (order.foodItems || []).find(f => f.name === mi.name);
-      return { ...mi, qty: existing?.qty || 0 };
-    })
-  );
-  const [drinkItems, setDrinkItems] = useState(
+      return { name: mi.name, price: Number(mi.price) || 0, qty: existing?.qty || 0 };
+    });
+
+  const initDrink = () =>
     (session?.drinkItems || []).map(di => {
       const existing = (order.drinkItems || []).find(d => d.name === di.name);
-      return { ...di, qty: existing?.qty || 0, sugar: existing?.sugar || "", ice: existing?.ice || "" };
-    })
-  );
+      return {
+        name: di.name,
+        price: Number(di.price) || 0,
+        qty: existing?.qty || 0,
+        sugar: existing?.sugar || "",
+        ice: existing?.ice || "",
+        sugarOptions: parseOptions(di.sugarOptions),
+        iceOptions: parseOptions(di.iceOptions),
+      };
+    });
+
+  const [foodItems, setFoodItems] = useState(initFood);
+  const [drinkItems, setDrinkItems] = useState(initDrink);
   const [note, setNote] = useState(order.note || "");
+
+  if (!session) return null;
 
   const setFoodQty = (idx, val) => {
     const n = Math.max(0, Number(val));
@@ -48,16 +66,21 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
 
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-      zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center"
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "rgba(0,0,0,0.45)", zIndex: 1000,
+      display: "flex", alignItems: "flex-end", justifyContent: "center"
     }}>
       <div style={{
-        background: "var(--card-bg, #fff)", borderRadius: "20px 20px 0 0",
+        background: "#fff", borderRadius: "20px 20px 0 0",
         padding: "24px 20px 36px", width: "100%", maxWidth: 520,
-        maxHeight: "85vh", overflowY: "auto", boxShadow: "0 -4px 32px rgba(0,0,0,0.18)"
+        maxHeight: "85vh", overflowY: "auto",
+        boxShadow: "0 -4px 32px rgba(0,0,0,0.18)"
       }}>
+        {/* 標題列 */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
-          <div className="person-avatar" style={{ marginRight: 10 }}>{(order.userName || "？")[0]}</div>
+          <div className="person-avatar" style={{ marginRight: 10 }}>
+            {(order.userName || "？")[0]}
+          </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>{order.userName || "匿名"}</div>
             <div style={{ fontSize: 12, color: "var(--text2)" }}>修改訂單內容</div>
@@ -65,10 +88,14 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 17 }}>$ {personTotal}</div>
         </div>
 
+        {/* 餐點 */}
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
-            🍱 {session?.restaurantName}
+            🍱 {session.restaurantName}
           </div>
+          {foodItems.length === 0 && (
+            <p style={{ fontSize: 13, color: "var(--text3)" }}>此訂單無餐點資料</p>
+          )}
           {foodItems.map((item, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
               <span style={{ flex: 1, fontSize: 14 }}>{item.name}</span>
@@ -84,10 +111,11 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           ))}
         </div>
 
-        {session?.drinkName && !drinkExcluded && drinkItems.length > 0 && (
+        {/* 飲料 */}
+        {session.drinkName && !drinkExcluded && drinkItems.length > 0 && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
-              🧋 {session?.drinkName}
+              🧋 {session.drinkName}
             </div>
             {drinkItems.map((item, i) => (
               <div key={i} style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid var(--bg2)" }}>
@@ -99,19 +127,19 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
                       style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--border)", background: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "var(--text2)" }}>−</button>
                     <span style={{ minWidth: 20, textAlign: "center", fontWeight: 700 }}>{item.qty}</span>
                     <button onClick={() => setDrinkQty(i, item.qty + 1)}
-                      style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--purple, #7c3aed)", background: "var(--purple, #7c3aed)", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff" }}>＋</button>
+                      style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid #7c3aed", background: "#7c3aed", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff" }}>＋</button>
                   </div>
                 </div>
                 {item.qty > 0 && (
                   <div style={{ display: "flex", gap: 8, paddingLeft: 4 }}>
-                    {item.sugarOptions?.length > 0 && (
+                    {item.sugarOptions.length > 0 && (
                       <select value={item.sugar} onChange={e => setDrinkOption(i, "sugar", e.target.value)}
                         style={{ flex: 1, padding: "5px 8px", borderRadius: 7, border: "1.5px solid var(--border)", fontSize: 13, fontFamily: "inherit" }}>
                         <option value="">糖度</option>
                         {item.sugarOptions.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     )}
-                    {item.iceOptions?.length > 0 && (
+                    {item.iceOptions.length > 0 && (
                       <select value={item.ice} onChange={e => setDrinkOption(i, "ice", e.target.value)}
                         style={{ flex: 1, padding: "5px 8px", borderRadius: 7, border: "1.5px solid var(--border)", fontSize: 13, fontFamily: "inherit" }}>
                         <option value="">冰量</option>
@@ -125,6 +153,7 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           </div>
         )}
 
+        {/* 備註 */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 6 }}>📝 備註</div>
           <input
@@ -143,7 +172,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
     </div>
   );
 }
-
 export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [tab, setTab] = useState(sessionId ? "manage" : "setup");
   const [toast, setToast] = useState("");
