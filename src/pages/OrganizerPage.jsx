@@ -1,12 +1,158 @@
 import { useState, useEffect } from "react";
 import {
   collection, addDoc, doc, onSnapshot,
-  updateDoc, serverTimestamp, getDocs
+  updateDoc, deleteDoc, serverTimestamp, getDocs
 } from "firebase/firestore";
 import { db } from "../firebase";
+
 function Toast({ msg }) {
   return msg ? <div className="toast">{msg}</div> : null;
 }
+
+// ===== 編輯訂單 Modal =====
+function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
+  const [foodItems, setFoodItems] = useState(
+    (session?.menuItems || []).map(mi => {
+      const existing = (order.foodItems || []).find(f => f.name === mi.name);
+      return { ...mi, qty: existing?.qty || 0 };
+    })
+  );
+  const [drinkItems, setDrinkItems] = useState(
+    (session?.drinkItems || []).map(di => {
+      const existing = (order.drinkItems || []).find(d => d.name === di.name);
+      return {
+        ...di,
+        qty: existing?.qty || 0,
+        sugar: existing?.sugar || "",
+        ice: existing?.ice || "",
+      };
+    })
+  );
+  const [note, setNote] = useState(order.note || "");
+
+  const setFoodQty = (idx, val) => {
+    const n = Math.max(0, Number(val));
+    setFoodItems(prev => prev.map((f, i) => i === idx ? { ...f, qty: n } : f));
+  };
+  const setDrinkQty = (idx, val) => {
+    const n = Math.max(0, Number(val));
+    setDrinkItems(prev => prev.map((d, i) => i === idx ? { ...d, qty: n } : d));
+  };
+  const setDrinkOption = (idx, key, val) => {
+    setDrinkItems(prev => prev.map((d, i) => i === idx ? { ...d, [key]: val } : d));
+  };
+
+  const handleSave = () => {
+    const newFood = foodItems.filter(f => f.qty > 0).map(({ name, price, qty }) => ({ name, price, qty }));
+    const newDrink = drinkItems.filter(d => d.qty > 0).map(({ name, price, qty, sugar, ice }) => ({ name, price, qty, sugar, ice }));
+    onSave({ foodItems: newFood, drinkItems: newDrink, note });
+  };
+
+  const personTotal =
+    foodItems.reduce((s, f) => s + f.price * f.qty, 0) +
+    (drinkExcluded ? 0 : drinkItems.reduce((s, d) => s + d.price * d.qty, 0));
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+      zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center"
+    }}>
+      <div style={{
+        background: "var(--card-bg, #fff)", borderRadius: "20px 20px 0 0",
+        padding: "24px 20px 36px", width: "100%", maxWidth: 520,
+        maxHeight: "85vh", overflowY: "auto", boxShadow: "0 -4px 32px rgba(0,0,0,0.18)"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
+          <div className="person-avatar" style={{ marginRight: 10 }}>{(order.userName || "？")[0]}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{order.userName || "匿名"}</div>
+            <div style={{ fontSize: 12, color: "var(--text2)" }}>修改訂單內容</div>
+          </div>
+          <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 17 }}>$ {personTotal}</div>
+        </div>
+
+        {/* 餐點 */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
+            🍱 {session?.restaurantName}
+          </div>
+          {foodItems.map((item, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <span style={{ flex: 1, fontSize: 14 }}>{item.name}</span>
+              <span style={{ fontSize: 12, color: "var(--text3)" }}>$ {item.price}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button onClick={() => setFoodQty(i, item.qty - 1)}
+                  style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--border)", background: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "var(--text2)" }}>−</button>
+                <span style={{ minWidth: 20, textAlign: "center", fontWeight: 700 }}>{item.qty}</span>
+                <button onClick={() => setFoodQty(i, item.qty + 1)}
+                  style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--accent)", background: "var(--accent)", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff" }}>＋</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* 飲料 */}
+        {session?.drinkName && !drinkExcluded && drinkItems.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
+              🧋 {session?.drinkName}
+            </div>
+            {drinkItems.map((item, i) => (
+              <div key={i} style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid var(--bg2)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                  <span style={{ flex: 1, fontSize: 14 }}>{item.name}</span>
+                  <span style={{ fontSize: 12, color: "var(--text3)" }}>$ {item.price}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <button onClick={() => setDrinkQty(i, item.qty - 1)}
+                      style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--border)", background: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "var(--text2)" }}>−</button>
+                    <span style={{ minWidth: 20, textAlign: "center", fontWeight: 700 }}>{item.qty}</span>
+                    <button onClick={() => setDrinkQty(i, item.qty + 1)}
+                      style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--purple, #7c3aed)", background: "var(--purple, #7c3aed)", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff" }}>＋</button>
+                  </div>
+                </div>
+                {item.qty > 0 && (
+                  <div style={{ display: "flex", gap: 8, paddingLeft: 4 }}>
+                    {item.sugarOptions?.length > 0 && (
+                      <select value={item.sugar} onChange={e => setDrinkOption(i, "sugar", e.target.value)}
+                        style={{ flex: 1, padding: "5px 8px", borderRadius: 7, border: "1.5px solid var(--border)", fontSize: 13, fontFamily: "inherit" }}>
+                        <option value="">糖度</option>
+                        {item.sugarOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+                    {item.iceOptions?.length > 0 && (
+                      <select value={item.ice} onChange={e => setDrinkOption(i, "ice", e.target.value)}
+                        style={{ flex: 1, padding: "5px 8px", borderRadius: 7, border: "1.5px solid var(--border)", fontSize: 13, fontFamily: "inherit" }}>
+                        <option value="">冰量</option>
+                        {item.iceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 備註 */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 6 }}>📝 備註</div>
+          <input
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="備註（選填）"
+            style={{ width: "100%", padding: "9px 12px", borderRadius: 9, border: "1.5px solid var(--border)", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>取消</button>
+          <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleSave}>✅ 儲存修改</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [tab, setTab] = useState(sessionId ? "manage" : "setup");
   const [toast, setToast] = useState("");
@@ -29,6 +175,8 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [orders, setOrders] = useState([]);
   const [shareLink, setShareLink] = useState("");
   const [drinkExcluded, setDrinkExcluded] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+
   useEffect(() => {
     getDocs(collection(db, "restaurants")).then(snap => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -36,6 +184,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setAllRestaurants(list);
     });
   }, []);
+
   useEffect(() => {
     if (!sessionId) return;
     const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
@@ -48,7 +197,9 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     });
     return () => { unsub(); unsubOrders(); };
   }, [sessionId]);
+
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+
   const onSelectFood = (id) => {
     setSelectedFoodId(id);
     if (!id || id === "__manual__") {
@@ -63,6 +214,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setSelectedFoodInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
   };
+
   const onSelectDrink = (id) => {
     setSelectedDrinkId(id);
     if (!id || id === "__manual__") { setDrinkName(""); setDrinkItems([]); return; }
@@ -73,16 +225,19 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setSelectedDrinkInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
   };
+
   const addMenuItem = () => {
     if (!newItemName || !newItemPrice) return;
     setMenuItems([...menuItems, { name: newItemName, price: Number(newItemPrice) }]);
     setNewItemName(""); setNewItemPrice("");
   };
+
   const addDrinkItem = () => {
     if (!newDrinkName || !newDrinkPrice) return;
     setDrinkItems([...drinkItems, { name: newDrinkName, price: Number(newDrinkPrice) }]);
     setNewDrinkName(""); setNewDrinkPrice("");
   };
+
   const createSession = async () => {
     if (!restaurantName) { showToast("請選擇或輸入餐廳名稱"); return; }
     if (menuItems.length === 0) { showToast("餐點菜單至少要有一個品項"); return; }
@@ -108,10 +263,26 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     } catch (e) { showToast("建立失敗，請重試"); }
     setCreating(false);
   };
+
   const copyLink = () => { navigator.clipboard.writeText(shareLink); showToast("🔗 連結已複製！"); };
+
   const togglePaid = async (orderId, current) => {
     await updateDoc(doc(db, "sessions", sessionId, "orders", orderId), { paid: !current });
   };
+
+  const deleteOrder = async (orderId, userName) => {
+    if (!window.confirm(`確定要刪除「${userName || "匿名"}」的訂單嗎？`)) return;
+    await deleteDoc(doc(db, "sessions", sessionId, "orders", orderId));
+    showToast("🗑️ 訂單已刪除");
+  };
+
+  const saveEditedOrder = async (updatedFields) => {
+    if (!editingOrder) return;
+    await updateDoc(doc(db, "sessions", sessionId, "orders", editingOrder.id), updatedFields);
+    setEditingOrder(null);
+    showToast("✅ 訂單已更新！");
+  };
+
   const getSummary = () => {
     const foodMap = {}, drinkMap = {};
     let total = 0;
@@ -129,9 +300,11 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     });
     return { food: Object.values(foodMap), drinks: Object.values(drinkMap), total };
   };
+
   const summary = session ? getSummary() : null;
   const foodRestaurants = allRestaurants.filter(r => r.type === "food");
   const drinkRestaurants = allRestaurants.filter(r => r.type === "drink");
+
   // ========== SETUP ==========
   if (tab === "setup" || !sessionId) {
     return (
@@ -148,7 +321,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
         </div>
-        {/* Food picker */}
         <div className="card">
           <div className="card-title">選擇餐廳</div>
           {foodRestaurants.length > 0 ? (
@@ -192,7 +364,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
         </div>
-        {/* Drink picker */}
         <div className="card">
           <div className="card-title">選擇飲料店（選填）</div>
           {drinkRestaurants.length > 0 ? (
@@ -244,6 +415,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       </div>
     );
   }
+
   // ========== MANAGE ==========
   return (
     <div className="page-wide">
@@ -260,6 +432,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         <button className={`tab-btn ${tab === "summary" ? "active" : ""}`} onClick={() => setTab("summary")}>🛒 匯整點餐</button>
         <button className={`tab-btn ${tab === "share" ? "active" : ""}`} onClick={() => setTab("share")}>🔗 分享連結</button>
       </div>
+
       {tab === "share" && (
         <div>
           <div className="card">
@@ -275,6 +448,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           </div>
         </div>
       )}
+
       {tab === "manage" && (
         <div>
           {orders.length === 0 ? (
@@ -303,17 +477,42 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                     </div>
                     <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 16 }}>$ {personTotal}</div>
                   </div>
+
                   {order.note && (
                     <div style={{ fontSize: 12, color: "var(--text2)", background: "var(--bg)", padding: "6px 10px", borderRadius: 6, marginBottom: 10 }}>
                       📝 備註：{order.note}
                     </div>
                   )}
-                  <label className="paid-toggle" onClick={() => togglePaid(order.id, order.paid)}>
-                    <div className={`toggle-switch ${order.paid ? "on" : ""}`} />
-                    <span style={{ fontSize: 13, color: order.paid ? "var(--green)" : "var(--text2)", fontWeight: 600 }}>
-                      {order.paid ? "✅ 已收款" : "⏳ 未收款"}
-                    </span>
-                  </label>
+
+                  {/* 操作列：收款 + 修改 + 刪除 */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <label className="paid-toggle" style={{ flex: 1 }} onClick={() => togglePaid(order.id, order.paid)}>
+                      <div className={`toggle-switch ${order.paid ? "on" : ""}`} />
+                      <span style={{ fontSize: 13, color: order.paid ? "var(--green)" : "var(--text2)", fontWeight: 600 }}>
+                        {order.paid ? "✅ 已收款" : "⏳ 未收款"}
+                      </span>
+                    </label>
+                    <button
+                      onClick={() => setEditingOrder(order)}
+                      style={{
+                        padding: "5px 13px", borderRadius: 8,
+                        border: "1.5px solid var(--border)", background: "none",
+                        fontSize: 13, cursor: "pointer", color: "var(--text2)", fontWeight: 600,
+                        whiteSpace: "nowrap"
+                      }}>
+                      ✏️ 修改
+                    </button>
+                    <button
+                      onClick={() => deleteOrder(order.id, order.userName)}
+                      style={{
+                        padding: "5px 13px", borderRadius: 8,
+                        border: "1.5px solid var(--red)", background: "none",
+                        fontSize: 13, cursor: "pointer", color: "var(--red)", fontWeight: 600,
+                        whiteSpace: "nowrap"
+                      }}>
+                      🗑️ 刪除
+                    </button>
+                  </div>
                 </div>
               );
             })
@@ -329,6 +528,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           )}
         </div>
       )}
+
       {tab === "summary" && (
         <div>
           <div className="card">
@@ -376,31 +576,17 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                 <button
                   onClick={() => setDrinkExcluded(prev => !prev)}
                   style={{
-                    padding: "4px 12px",
-                    borderRadius: 20,
+                    padding: "4px 12px", borderRadius: 20,
                     border: drinkExcluded ? "1.5px solid var(--red)" : "1.5px solid var(--border)",
                     background: drinkExcluded ? "var(--red-bg, #fff0f0)" : "transparent",
                     color: drinkExcluded ? "var(--red)" : "var(--text3)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    transition: "all 0.15s",
-                  }}
-                >
+                    fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s",
+                  }}>
                   {drinkExcluded ? "❌ 未達標（已排除）" : "未達標"}
                 </button>
               </div>
               {drinkExcluded ? (
-                <div style={{
-                  padding: "12px 14px",
-                  background: "var(--red-bg, #fff0f0)",
-                  border: "1px solid var(--red)",
-                  borderRadius: 8,
-                  color: "var(--red)",
-                  fontSize: 13,
-                  fontWeight: 500,
-                }}>
+                <div style={{ padding: "12px 14px", background: "var(--red-bg, #fff0f0)", border: "1px solid var(--red)", borderRadius: 8, color: "var(--red)", fontSize: 13, fontWeight: 500 }}>
                   飲料未達訂購門檻，已從統計與收款中排除。
                 </div>
               ) : (
@@ -451,9 +637,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               <span className="label">
                 💰 全部合計
                 {drinkExcluded && (
-                  <span style={{ fontSize: 11, color: "var(--red)", marginLeft: 6, fontWeight: 500 }}>
-                    （飲料未計入）
-                  </span>
+                  <span style={{ fontSize: 11, color: "var(--red)", marginLeft: 6, fontWeight: 500 }}>（飲料未計入）</span>
                 )}
               </span>
               <span className="amount">$ {summary?.total || 0}</span>
@@ -461,6 +645,18 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           </div>
         </div>
       )}
+
+      {/* 編輯 Modal */}
+      {editingOrder && (
+        <EditOrderModal
+          order={editingOrder}
+          session={session}
+          drinkExcluded={drinkExcluded}
+          onSave={saveEditedOrder}
+          onClose={() => setEditingOrder(null)}
+        />
+      )}
+
       <Toast msg={toast} />
     </div>
   );
