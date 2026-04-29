@@ -76,7 +76,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
         maxHeight: "85vh", overflowY: "auto",
         boxShadow: "0 -4px 32px rgba(0,0,0,0.18)"
       }}>
-        {/* 標題列 */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
           <div className="person-avatar" style={{ marginRight: 10 }}>
             {(order.userName || "？")[0]}
@@ -88,7 +87,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 17 }}>$ {personTotal}</div>
         </div>
 
-        {/* 餐點 */}
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
             🍱 {session.restaurantName}
@@ -111,7 +109,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           ))}
         </div>
 
-        {/* 飲料 */}
         {session.drinkName && !drinkExcluded && drinkItems.length > 0 && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
@@ -153,7 +150,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           </div>
         )}
 
-        {/* 備註 */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 6 }}>📝 備註</div>
           <input
@@ -172,6 +168,7 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
     </div>
   );
 }
+
 export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [tab, setTab] = useState(sessionId ? "manage" : "setup");
   const [toast, setToast] = useState("");
@@ -553,7 +550,11 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               : summary?.food.map((item, i) => {
                 const orderers = orders.filter(o =>
                   (o.foodItems || []).some(fi => fi.name === item.name)
-                ).map(o => ({ name: o.userName, qty: (o.foodItems || []).find(fi => fi.name === item.name)?.qty || 0, note: o.note }));
+                ).map(o => ({
+                  name: o.userName,
+                  qty: (o.foodItems || []).find(fi => fi.name === item.name)?.qty || 0,
+                  note: o.note
+                }));
                 return (
                   <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -563,15 +564,15 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
                         <span style={{ color: "var(--accent)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
                       </div>
                     </div>
-                    {orderers.some(o => o.note) && (
-                      <div style={{ marginTop: 4 }}>
-                        {orderers.filter(o => o.note).map((o, j) => (
-                          <div key={j} style={{ fontSize: 12, color: "var(--text2)", paddingLeft: 8 }}>
-                            └ <span style={{ fontWeight: 600, color: "var(--accent)" }}>{o.name}</span>：{o.note}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {/* ↓↓↓ 修改處：永遠顯示所有訂購人姓名，有備註才附上 ↓↓↓ */}
+                    <div style={{ marginTop: 4 }}>
+                      {orderers.map((o, j) => (
+                        <div key={j} style={{ fontSize: 12, color: "var(--text2)", paddingLeft: 8 }}>
+                          └ <span style={{ fontWeight: 600, color: "var(--accent)" }}>{o.name}</span>
+                          {o.note && <span>：{o.note}</span>}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
               })
@@ -642,7 +643,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
 
-          {/* 合計卡片：餐點＋飲料分開顯示 */}
           <div className="card" style={{ background: "var(--bg2)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginBottom: 8 }}>
               <span>🍱 餐點小計</span>
