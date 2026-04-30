@@ -87,27 +87,29 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 17 }}>$ {personTotal}</div>
         </div>
 
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
-            🍱 {session.restaurantName}
-          </div>
-          {foodItems.length === 0 && (
-            <p style={{ fontSize: 13, color: "var(--text3)" }}>此訂單無餐點資料</p>
-          )}
-          {foodItems.map((item, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <span style={{ flex: 1, fontSize: 14 }}>{item.name}</span>
-              <span style={{ fontSize: 12, color: "var(--text3)" }}>$ {item.price}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <button onClick={() => setFoodQty(i, item.qty - 1)}
-                  style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--border)", background: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "var(--text2)" }}>−</button>
-                <span style={{ minWidth: 20, textAlign: "center", fontWeight: 700 }}>{item.qty}</span>
-                <button onClick={() => setFoodQty(i, item.qty + 1)}
-                  style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--accent)", background: "var(--accent)", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff" }}>＋</button>
-              </div>
+        {session.restaurantName && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
+              🍱 {session.restaurantName}
             </div>
-          ))}
-        </div>
+            {foodItems.length === 0 && (
+              <p style={{ fontSize: 13, color: "var(--text3)" }}>此訂單無餐點資料</p>
+            )}
+            {foodItems.map((item, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <span style={{ flex: 1, fontSize: 14 }}>{item.name}</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>$ {item.price}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <button onClick={() => setFoodQty(i, item.qty - 1)}
+                    style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--border)", background: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "var(--text2)" }}>−</button>
+                  <span style={{ minWidth: 20, textAlign: "center", fontWeight: 700 }}>{item.qty}</span>
+                  <button onClick={() => setFoodQty(i, item.qty + 1)}
+                    style={{ width: 28, height: 28, borderRadius: 8, border: "1.5px solid var(--accent)", background: "var(--accent)", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff" }}>＋</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {session.drinkName && !drinkExcluded && drinkItems.length > 0 && (
           <div style={{ marginBottom: 18 }}>
@@ -255,12 +257,30 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   };
 
   const createSession = async () => {
-    if (!restaurantName) { showToast("請選擇或輸入餐廳名稱"); return; }
-    if (menuItems.length === 0) { showToast("餐點菜單至少要有一個品項"); return; }
+    const hasFood = restaurantName && menuItems.length > 0;
+    const hasDrink = drinkName && drinkItems.length > 0;
+
+    // 至少要有餐廳或飲料店其中一個
+    if (!hasFood && !hasDrink) {
+      showToast("請至少選擇一個餐廳或飲料店");
+      return;
+    }
+    // 如果填了餐廳名稱但沒有品項
+    if (restaurantName && menuItems.length === 0) {
+      showToast("已選餐廳，請至少加入一個餐點品項");
+      return;
+    }
+    // 如果填了飲料店但沒有品項
+    if (drinkName && drinkItems.length === 0) {
+      showToast("已選飲料店，請至少加入一個飲料品項");
+      return;
+    }
+
     setCreating(true);
     try {
       const ref = await addDoc(collection(db, "sessions"), {
-        date, restaurantName,
+        date,
+        restaurantName: restaurantName || "",
         restaurantPhone: selectedFoodInfo.phone || "",
         restaurantAddress: selectedFoodInfo.address || "",
         restaurantNote: selectedFoodInfo.deliveryNote || "",
@@ -268,7 +288,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         drinkPhone: selectedDrinkInfo.phone || "",
         drinkAddress: selectedDrinkInfo.address || "",
         drinkNote: selectedDrinkInfo.deliveryNote || "",
-        menuItems,
+        menuItems: restaurantName ? menuItems : [],
         drinkItems: drinkName ? drinkItems : [],
         status: "open",
         createdAt: serverTimestamp(),
@@ -332,6 +352,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           <h1>建立今日訂單</h1>
           <button className="btn btn-secondary btn-sm" onClick={() => navigate("menumanager")}>📋 菜單庫</button>
         </div>
+
         <div className="card">
           <div className="card-title">基本資訊</div>
           <div className="field">
@@ -339,13 +360,15 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
         </div>
+
+        {/* ── 餐廳（選填）── */}
         <div className="card">
-          <div className="card-title">選擇餐廳</div>
+          <div className="card-title">選擇餐廳 <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text3)" }}>（選填）</span></div>
           {foodRestaurants.length > 0 ? (
             <div className="field">
               <label>從菜單庫選擇</label>
               <select value={selectedFoodId} onChange={e => onSelectFood(e.target.value)}>
-                <option value="">— 請選擇 —</option>
+                <option value="">— 不點餐 —</option>
                 {foodRestaurants.map(r => (
                   <option key={r.id} value={r.id}>{r.name}（{(r.items||[]).length} 項）</option>
                 ))}
@@ -353,11 +376,12 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               </select>
             </div>
           ) : (
-            <div style={{ background: "var(--amber-bg)", border: "1px solid #F0C060", borderRadius: 8, padding: "10px 12px", marginBottom: 12, fontSize: 13, color: "var(--amber)" }}>
-              💡 點右上角「菜單庫」先建立常用餐廳，以後選餐廳會更快！
+            <div className="field">
+              <label>餐廳名稱（留空表示只點飲料）</label>
+              <input placeholder="例：大碗公自助餐" value={restaurantName} onChange={e => setRestaurantName(e.target.value)} />
             </div>
           )}
-          {(selectedFoodId === "__manual__" || foodRestaurants.length === 0) && (
+          {(selectedFoodId === "__manual__" && foodRestaurants.length > 0) && (
             <div className="field">
               <label>餐廳名稱</label>
               <input placeholder="例：大碗公自助餐" value={restaurantName} onChange={e => setRestaurantName(e.target.value)} />
@@ -382,8 +406,10 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
         </div>
+
+        {/* ── 飲料店（選填）── */}
         <div className="card">
-          <div className="card-title">選擇飲料店（選填）</div>
+          <div className="card-title">選擇飲料店 <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text3)" }}>（選填）</span></div>
           {drinkRestaurants.length > 0 ? (
             <div className="field">
               <label>從菜單庫選擇</label>
@@ -426,6 +452,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
         </div>
+
         <button className="btn btn-primary" onClick={createSession} disabled={creating}>
           {creating ? "建立中..." : "🚀 產生點餐連結"}
         </button>
@@ -440,7 +467,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       <div className="top-bar">
         <button className="btn btn-icon" onClick={() => navigate("home")}>←</button>
         <h1>
-          {session?.restaurantName || "..."}
+          {session?.restaurantName || session?.drinkName || "..."}
           <span style={{ fontSize: 13, fontWeight: 400, color: "var(--text2)", marginLeft: 8 }}>{session?.date}</span>
         </h1>
         <span className="badge badge-green">進行中</span>
@@ -536,53 +563,54 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
 
       {tab === "summary" && (
         <div>
-          <div className="card">
-            <div className="card-title">📦 餐廳點餐清單（{session?.restaurantName}）</div>
-            {(session?.restaurantPhone || session?.restaurantAddress) && (
-              <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg2)", borderRadius: 8 }}>
-                {session?.restaurantPhone && <div style={{ fontSize: 13, marginBottom: 3 }}>📞 <a href={`tel:${session.restaurantPhone}`} style={{ color: "var(--accent)", fontWeight: 600 }}>{session.restaurantPhone}</a></div>}
-                {session?.restaurantAddress && <div style={{ fontSize: 12, color: "var(--text2)" }}>📍 {session.restaurantAddress}</div>}
-                {session?.restaurantNote && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🛵 {session.restaurantNote}</div>}
-              </div>
-            )}
-            {summary?.food.length === 0
-              ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無餐點訂單</p>
-              : summary?.food.map((item, i) => {
-                const orderers = orders.filter(o =>
-                  (o.foodItems || []).some(fi => fi.name === item.name)
-                ).map(o => ({
-                  name: o.userName,
-                  qty: (o.foodItems || []).find(fi => fi.name === item.name)?.qty || 0,
-                  note: o.note
-                }));
-                return (
-                  <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontWeight: 600 }}>{item.name}</span>
-                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                        <span className="badge badge-gray">× {item.qty}</span>
-                        <span style={{ color: "var(--accent)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
+          {session?.restaurantName && (
+            <div className="card">
+              <div className="card-title">📦 餐廳點餐清單（{session.restaurantName}）</div>
+              {(session?.restaurantPhone || session?.restaurantAddress) && (
+                <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg2)", borderRadius: 8 }}>
+                  {session?.restaurantPhone && <div style={{ fontSize: 13, marginBottom: 3 }}>📞 <a href={`tel:${session.restaurantPhone}`} style={{ color: "var(--accent)", fontWeight: 600 }}>{session.restaurantPhone}</a></div>}
+                  {session?.restaurantAddress && <div style={{ fontSize: 12, color: "var(--text2)" }}>📍 {session.restaurantAddress}</div>}
+                  {session?.restaurantNote && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🛵 {session.restaurantNote}</div>}
+                </div>
+              )}
+              {summary?.food.length === 0
+                ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無餐點訂單</p>
+                : summary?.food.map((item, i) => {
+                  const orderers = orders.filter(o =>
+                    (o.foodItems || []).some(fi => fi.name === item.name)
+                  ).map(o => ({
+                    name: o.userName,
+                    qty: (o.foodItems || []).find(fi => fi.name === item.name)?.qty || 0,
+                    note: o.note
+                  }));
+                  return (
+                    <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontWeight: 600 }}>{item.name}</span>
+                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                          <span className="badge badge-gray">× {item.qty}</span>
+                          <span style={{ color: "var(--accent)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        {orderers.map((o, j) => (
+                          <div key={j} style={{ fontSize: 12, color: "var(--text2)", paddingLeft: 8 }}>
+                            └ <span style={{ fontWeight: 600, color: "var(--accent)" }}>{o.name}</span>
+                            {o.note && <span>：{o.note}</span>}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    {/* ↓↓↓ 修改處：永遠顯示所有訂購人姓名，有備註才附上 ↓↓↓ */}
-                    <div style={{ marginTop: 4 }}>
-                      {orderers.map((o, j) => (
-                        <div key={j} style={{ fontSize: 12, color: "var(--text2)", paddingLeft: 8 }}>
-                          └ <span style={{ fontWeight: 600, color: "var(--accent)" }}>{o.name}</span>
-                          {o.note && <span>：{o.note}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })
-            }
-          </div>
+                  );
+                })
+              }
+            </div>
+          )}
 
           {session?.drinkName && (
             <div className="card">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <div className="card-title" style={{ marginBottom: 0 }}>🧋 飲料點餐清單（{session?.drinkName}）</div>
+                <div className="card-title" style={{ marginBottom: 0 }}>🧋 飲料點餐清單（{session.drinkName}）</div>
                 <button
                   onClick={() => setDrinkExcluded(prev => !prev)}
                   style={{
@@ -644,17 +672,17 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           )}
 
           <div className="card" style={{ background: "var(--bg2)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginBottom: 8 }}>
-              <span>🍱 餐點小計</span>
-              <span style={{ fontWeight: 600, color: "var(--accent)" }}>$ {summary?.foodTotal || 0}</span>
-            </div>
+            {session?.restaurantName && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginBottom: 8 }}>
+                <span>🍱 餐點小計</span>
+                <span style={{ fontWeight: 600, color: "var(--accent)" }}>$ {summary?.foodTotal || 0}</span>
+              </div>
+            )}
             {session?.drinkName && (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginBottom: 12 }}>
                 <span>
                   🧋 飲料小計
-                  {drinkExcluded && (
-                    <span style={{ fontSize: 11, color: "var(--red)", marginLeft: 6 }}>（未計入）</span>
-                  )}
+                  {drinkExcluded && <span style={{ fontSize: 11, color: "var(--red)", marginLeft: 6 }}>（未計入）</span>}
                 </span>
                 <span style={{ fontWeight: 600, color: drinkExcluded ? "var(--text3)" : "var(--purple, #7c3aed)", textDecoration: drinkExcluded ? "line-through" : "none" }}>
                   $ {orders.reduce((s, o) => s + (o.drinkItems || []).reduce((ss, i) => ss + i.price * i.qty, 0), 0)}
