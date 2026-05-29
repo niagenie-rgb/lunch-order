@@ -220,17 +220,26 @@ export default function MenuManagerPage({ navigate }) {
     [arr[i], arr[j]] = [arr[j], arr[i]];
     setEditItems(arr);
   };
-  // ── 新增：更新單一品項價格 ─────────────────────────────────────────
   const updateItemPrice = (i, val) => {
     const arr = [...editItems];
     arr[i] = { ...arr[i], price: val === "" ? "" : Number(val) };
     setEditItems(arr);
   };
+  // ── 新增：更新單一品項名稱 ─────────────────────────────────────────
+  const updateItemName = (i, val) => {
+    const arr = [...editItems];
+    arr[i] = { ...arr[i], name: val };
+    setEditItems(arr);
+  };
   const saveItems = async () => {
+    // 檢查是否有空白品名
+    if (editItems.some(item => !String(item.name).trim())) {
+      showToast("品項名稱不能為空", "error"); return;
+    }
     setSaving(true);
-    // 儲存前把空字串價格轉為 0
     const itemsToSave = editItems.map(item => ({
       ...item,
+      name: String(item.name).trim(),
       price: item.price === "" ? 0 : Number(item.price)
     }));
     await updateDoc(doc(db, "restaurants", editingId), {
@@ -404,6 +413,7 @@ export default function MenuManagerPage({ navigate }) {
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
           onUpdateItemPrice={updateItemPrice}
+          onUpdateItemName={updateItemName}
           onSave={saveItems} onCancel={() => setEditingId(null)} saving={saving} />
       ))}
       {/* Drink List */}
@@ -417,6 +427,7 @@ export default function MenuManagerPage({ navigate }) {
           onEdit={() => startEdit(r)} onDelete={() => deleteRestaurant(r.id)}
           onAddItem={addItem} onRemoveItem={removeItem} onMoveItem={moveItem}
           onUpdateItemPrice={updateItemPrice}
+          onUpdateItemName={updateItemName}
           onSave={saveItems} onCancel={() => setEditingId(null)} saving={saving} />
       ))}
       <Toast msg={toast.msg} type={toast.type} />
@@ -427,7 +438,9 @@ function RestaurantCard({
   restaurant, isEditing, editItems, editInfo, setEditInfo,
   newItemName, newItemPrice, newItemCategory,
   setNewItemName, setNewItemPrice, setNewItemCategory,
-  onEdit, onDelete, onAddItem, onRemoveItem, onMoveItem, onUpdateItemPrice, onSave, onCancel, saving
+  onEdit, onDelete, onAddItem, onRemoveItem, onMoveItem,
+  onUpdateItemPrice, onUpdateItemName,
+  onSave, onCancel, saving
 }) {
   return (
     <div className="card" style={{ borderColor: isEditing ? "var(--accent)" : "var(--border)" }}>
@@ -512,16 +525,26 @@ function RestaurantCard({
             : (
               <div style={{ marginBottom: 14, maxHeight: 320, overflowY: "auto" }}>
                 {editItems.map((item, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
+                    {/* 排序按鈕 */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
                       <button onClick={() => onMoveItem(i, -1)} disabled={i === 0} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text3)", lineHeight: 1, padding: "1px 4px" }}>▲</button>
                       <button onClick={() => onMoveItem(i, 1)} disabled={i === editItems.length - 1} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text3)", lineHeight: 1, padding: "1px 4px" }}>▼</button>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
-                      {item.category && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>{item.category}</div>}
-                    </div>
-                    {/* ▼▼▼ 改動處：價格改為可編輯 input ▼▼▼ */}
+                    {/* 品名 input（可編輯） */}
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={e => onUpdateItemName(i, e.target.value)}
+                      style={{
+                        flex: 1, minWidth: 0,
+                        padding: "4px 8px",
+                        border: "1.5px solid var(--border)", borderRadius: 6,
+                        fontSize: 14, fontFamily: "inherit",
+                        background: "var(--card)", color: "var(--text)",
+                      }}
+                    />
+                    {/* 價格 input */}
                     <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
                       <span style={{ fontSize: 13, color: "var(--text3)" }}>$</span>
                       <input
@@ -537,7 +560,7 @@ function RestaurantCard({
                         }}
                       />
                     </div>
-                    {/* ▲▲▲ 改動結束 ▲▲▲ */}
+                    {/* 刪除 */}
                     <button onClick={() => onRemoveItem(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: 16, padding: "0 4px", flexShrink: 0 }}>✕</button>
                   </div>
                 ))}
