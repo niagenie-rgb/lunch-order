@@ -294,7 +294,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         createdAt: serverTimestamp(),
       });
       setSessionId(ref.id);
-      setTab("manage");
+      setTab("share");
       showToast("✅ 訂單已建立！");
     } catch (e) { showToast("建立失敗，請重試"); }
     setCreating(false);
