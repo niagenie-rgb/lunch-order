@@ -4,11 +4,9 @@ import {
   query, where, getDocs, updateDoc, deleteDoc, serverTimestamp
 } from "firebase/firestore";
 import { db } from "../firebase";
-
 function Toast({ msg }) {
   return msg ? <div className="toast">{msg}</div> : null;
 }
-
 function DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkOpt, SUGAR_OPTIONS, ICE_OPTIONS }) {
   const drinkGroups = {};
   (session.drinkItems || []).forEach(item => {
@@ -17,7 +15,6 @@ function DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkO
     drinkGroups[cat].push(item);
   });
   const hasDrinkCats = Object.keys(drinkGroups).some(k => k !== "");
-
   const DrinkCard = ({ item }) => {
     const qty = drinkSelections[item.name] || 0;
     const opts = drinkOptions[item.name] || { sugar: "全糖", ice: "冰" };
@@ -73,7 +70,6 @@ function DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkO
       </div>
     );
   };
-
   if (hasDrinkCats) {
     return Object.entries(drinkGroups).map(([cat, items]) => (
       <div key={cat}>
@@ -96,7 +92,6 @@ function DrinkList({ session, drinkSelections, drinkOptions, setDrink, setDrinkO
     </>
   );
 }
-
 export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -111,7 +106,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   const [existingOrderId, setExistingOrderId] = useState(null);
   const [finalOrder, setFinalOrder] = useState(null);
   const [deleting, setDeleting] = useState(false);
-
   const SUGAR_OPTIONS = ["全糖", "一份糖", "半糖", "三分糖", "無糖"];
   const ICE_OPTIONS = ["冰", "少冰", "半冰", "微冰", "去冰", "溫熱"];
 
@@ -119,7 +113,23 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     if (!sessionId) return;
     (async () => {
       const snap = await getDoc(doc(db, "sessions", sessionId));
-      if (snap.exists()) setSession({ id: snap.id, ...snap.data() });
+      if (!snap.exists()) { setLoading(false); return; }
+      const data = { id: snap.id, ...snap.data() };
+
+      // ── 核心：若有 restaurantId / drinkStoreId，即時從菜單庫讀取 ──
+      let menuItems = data.menuItems || [];
+      let drinkItems = data.drinkItems || [];
+
+      if (data.restaurantId) {
+        const rSnap = await getDoc(doc(db, "restaurants", data.restaurantId));
+        if (rSnap.exists()) menuItems = rSnap.data().items || [];
+      }
+      if (data.drinkStoreId) {
+        const dSnap = await getDoc(doc(db, "restaurants", data.drinkStoreId));
+        if (dSnap.exists()) drinkItems = dSnap.data().items || [];
+      }
+
+      setSession({ ...data, menuItems, drinkItems });
       setLoading(false);
     })();
   }, [sessionId]);
@@ -151,7 +161,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   }, [sessionId, userId]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
-
   const setFood = (name, delta) => {
     setFoodSelections(prev => {
       const cur = prev[name] || 0;
@@ -160,7 +169,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       return { ...prev, [name]: next };
     });
   };
-
   const setDrink = (name, delta) => {
     setDrinkSelections(prev => {
       const cur = prev[name] || 0;
@@ -170,11 +178,9 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       return { ...prev, [name]: next };
     });
   };
-
   const setDrinkOpt = (name, field, val) => {
     setDrinkOptions(prev => ({ ...prev, [name]: { ...(prev[name] || { sugar: "全糖", ice: "冰" }), [field]: val } }));
   };
-
   const getFoodItems = () => session
     ? Object.entries(foodSelections).map(([name, qty]) => ({
         name, qty,
@@ -182,7 +188,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
         category: session.menuItems.find(m => m.name === name)?.category || "",
       }))
     : [];
-
   const getDrinkItems = () => session
     ? Object.entries(drinkSelections).map(([name, qty]) => ({
         name, qty,
@@ -191,10 +196,8 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
         ice: drinkOptions[name]?.ice || "冰",
       }))
     : [];
-
   const getTotal = (f, d) =>
     f.reduce((s, i) => s + i.price * i.qty, 0) + d.reduce((s, i) => s + i.price * i.qty, 0);
-
   const groupByCategory = (items) => {
     const groups = {};
     const uncategorized = [];
@@ -208,7 +211,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     });
     return { groups, uncategorized };
   };
-
   const resetForNextOrder = () => {
     setFoodSelections({});
     setDrinkSelections({});
@@ -219,9 +221,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     setFinalOrder(null);
     setStep("name");
   };
-
   const editOrder = () => { setStep("food"); };
-
   const deleteOrder = async () => {
     if (!existingOrderId) return;
     if (!window.confirm("確定要刪除這筆訂單嗎？")) return;
@@ -242,7 +242,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     }
     setDeleting(false);
   };
-
   const submit = async () => {
     const foodItems = getFoodItems();
     const drinkItems = getDrinkItems();
@@ -268,7 +267,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     } catch (e) { showToast("送出失敗，請重試"); }
     setSubmitting(false);
   };
-
   if (loading) return <div className="loading">載入中...</div>;
   if (!session) return <div className="page"><div className="empty"><div className="empty-icon">😕</div><p>找不到這個訂單</p></div></div>;
   if (session.status === "closed") return (
@@ -277,8 +275,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       <div className="empty"><div className="empty-icon">🔒</div><p style={{ fontWeight: 700 }}>此訂單已結單</p><p style={{ color: "var(--text2)", marginTop: 6, fontSize: 14 }}>發起人已完成收單</p></div>
     </div>
   );
-
-  // ── DONE ──────────────────────────────────────────────────────────
   if (step === "done" && finalOrder) {
     return (
       <div className="page">
@@ -357,8 +353,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       </div>
     );
   }
-
-  // ── NAME ──────────────────────────────────────────────────────────
   if (step === "name") {
     return (
       <div className="page">
@@ -385,13 +379,10 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       </div>
     );
   }
-
-  // ── FOOD ──────────────────────────────────────────────────────────
   if (step === "food") {
     const { groups, uncategorized } = groupByCategory(session.menuItems || []);
     const hasCats = Object.keys(groups).length > 0;
     const hasDrink = !!session.drinkName;
-
     const MenuItemRow = ({ item }) => {
       const qty = foodSelections[item.name] || 0;
       return (
@@ -408,7 +399,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
         </div>
       );
     };
-
     return (
       <div className="page">
         <div className="top-bar">
@@ -416,8 +406,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
           <h1>{session.restaurantName}</h1>
           <span style={{ fontSize: 13, color: "var(--text2)" }}>{userName}</span>
         </div>
-
-        {/* 只點飲料捷徑 */}
         {hasDrink && (
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -430,7 +418,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
             </span>
           </div>
         )}
-
         {hasCats ? (
           <>
             {Object.entries(groups).map(([cat, items]) => (
@@ -462,14 +449,11 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
             {(session.menuItems || []).map((item, i) => <MenuItemRow key={i} item={item} />)}
           </>
         )}
-
         <div className="field" style={{ marginTop: 16 }}>
           <label>訂單備註（選填）</label>
           <textarea placeholder="例如：不要飯、半飯、少辣…"
             value={note} onChange={e => setNote(e.target.value)} style={{ minHeight: 60 }} />
         </div>
-
-        {/* 按鈕區：有飲料店時分兩個選項 */}
         {hasDrink ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <button className="btn btn-primary" onClick={() => setStep("drink")}>
@@ -496,13 +480,10 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
             確認訂單 →
           </button>
         )}
-
         <Toast msg={toast} />
       </div>
     );
   }
-
-  // ── DRINK ──────────────────────────────────────────────────────────
   if (step === "drink") {
     return (
       <div className="page">
@@ -535,8 +516,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       </div>
     );
   }
-
-  // ── CONFIRM ──────────────────────────────────────────────────────
   if (step === "confirm") {
     const foodItems = getFoodItems();
     const drinkItems = getDrinkItems();
@@ -544,7 +523,6 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
     return (
       <div className="page">
         <div className="top-bar">
-          {/* 返回鍵：統一回到 food，讓使用者自由重選 */}
           <button className="btn btn-icon" onClick={() => setStep("food")}>←</button>
           <h1>確認訂單</h1>
         </div>
@@ -600,6 +578,5 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       </div>
     );
   }
-
   return null;
 }
