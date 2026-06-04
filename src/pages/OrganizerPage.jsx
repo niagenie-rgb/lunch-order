@@ -4,24 +4,20 @@ import {
   updateDoc, deleteDoc, serverTimestamp, getDocs
 } from "firebase/firestore";
 import { db } from "../firebase";
-
 function Toast({ msg }) {
   return msg ? <div className="toast">{msg}</div> : null;
 }
-
 function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
   const parseOptions = (val) => {
     if (!val) return [];
     if (Array.isArray(val)) return val;
     return String(val).split(",").map(s => s.trim()).filter(Boolean);
   };
-
   const initFood = () =>
     (session?.menuItems || []).map(mi => {
       const existing = (order.foodItems || []).find(f => f.name === mi.name);
       return { name: mi.name, price: Number(mi.price) || 0, qty: existing?.qty || 0 };
     });
-
   const initDrink = () =>
     (session?.drinkItems || []).map(di => {
       const existing = (order.drinkItems || []).find(d => d.name === di.name);
@@ -35,13 +31,10 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
         iceOptions: parseOptions(di.iceOptions),
       };
     });
-
   const [foodItems, setFoodItems] = useState(initFood);
   const [drinkItems, setDrinkItems] = useState(initDrink);
   const [note, setNote] = useState(order.note || "");
-
   if (!session) return null;
-
   const setFoodQty = (idx, val) => {
     const n = Math.max(0, Number(val));
     setFoodItems(prev => prev.map((f, i) => i === idx ? { ...f, qty: n } : f));
@@ -53,17 +46,14 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
   const setDrinkOption = (idx, key, val) => {
     setDrinkItems(prev => prev.map((d, i) => i === idx ? { ...d, [key]: val } : d));
   };
-
   const handleSave = () => {
     const newFood = foodItems.filter(f => f.qty > 0).map(({ name, price, qty }) => ({ name, price, qty }));
     const newDrink = drinkItems.filter(d => d.qty > 0).map(({ name, price, qty, sugar, ice }) => ({ name, price, qty, sugar, ice }));
     onSave({ foodItems: newFood, drinkItems: newDrink, note });
   };
-
   const personTotal =
     foodItems.reduce((s, f) => s + f.price * f.qty, 0) +
     (drinkExcluded ? 0 : drinkItems.reduce((s, d) => s + d.price * d.qty, 0));
-
   return (
     <div style={{
       position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
@@ -86,7 +76,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
           </div>
           <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 17 }}>$ {personTotal}</div>
         </div>
-
         {session.restaurantName && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
@@ -110,7 +99,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
             ))}
           </div>
         )}
-
         {session.drinkName && !drinkExcluded && drinkItems.length > 0 && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 10 }}>
@@ -151,7 +139,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
             ))}
           </div>
         )}
-
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)", marginBottom: 6 }}>📝 備註</div>
           <input
@@ -161,7 +148,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
             style={{ width: "100%", padding: "9px 12px", borderRadius: 9, border: "1.5px solid var(--border)", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
           />
         </div>
-
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>取消</button>
           <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleSave}>✅ 儲存修改</button>
@@ -170,7 +156,6 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
     </div>
   );
 }
-
 export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [tab, setTab] = useState(sessionId ? "manage" : "setup");
   const [toast, setToast] = useState("");
@@ -195,6 +180,10 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [drinkExcluded, setDrinkExcluded] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
 
+  // ── 新增：即時菜單 state（給 EditOrderModal 用）──
+  const [liveMenuItems, setLiveMenuItems] = useState([]);
+  const [liveDrinkItems, setLiveDrinkItems] = useState([]);
+
   useEffect(() => {
     getDocs(collection(db, "restaurants")).then(snap => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -208,7 +197,28 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     const link = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
     setShareLink(link);
     const unsub = onSnapshot(doc(db, "sessions", sessionId), snap => {
-      if (snap.exists()) setSession({ id: snap.id, ...snap.data() });
+      if (snap.exists()) {
+        const data = { id: snap.id, ...snap.data() };
+        setSession(data);
+
+        // ── 新增：當 session 載入後，即時從菜單庫讀取最新菜單 ──
+        if (data.restaurantId) {
+          getDocs(collection(db, "restaurants")).then(rSnap => {
+            const r = rSnap.docs.find(d => d.id === data.restaurantId);
+            if (r) setLiveMenuItems(r.data().items || []);
+          });
+        } else {
+          setLiveMenuItems(data.menuItems || []);
+        }
+        if (data.drinkStoreId) {
+          getDocs(collection(db, "restaurants")).then(rSnap => {
+            const r = rSnap.docs.find(d => d.id === data.drinkStoreId);
+            if (r) setLiveDrinkItems(r.data().items || []);
+          });
+        } else {
+          setLiveDrinkItems(data.drinkItems || []);
+        }
+      }
     });
     const unsubOrders = onSnapshot(collection(db, "sessions", sessionId, "orders"), snap => {
       setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -217,7 +227,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   }, [sessionId]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
-
   const onSelectFood = (id) => {
     setSelectedFoodId(id);
     if (!id || id === "__manual__") {
@@ -232,7 +241,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setSelectedFoodInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
   };
-
   const onSelectDrink = (id) => {
     setSelectedDrinkId(id);
     if (!id || id === "__manual__") { setDrinkName(""); setDrinkItems([]); return; }
@@ -243,53 +251,51 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setSelectedDrinkInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
   };
-
   const addMenuItem = () => {
     if (!newItemName || !newItemPrice) return;
     setMenuItems([...menuItems, { name: newItemName, price: Number(newItemPrice) }]);
     setNewItemName(""); setNewItemPrice("");
   };
-
   const addDrinkItem = () => {
     if (!newDrinkName || !newDrinkPrice) return;
     setDrinkItems([...drinkItems, { name: newDrinkName, price: Number(newDrinkPrice) }]);
     setNewDrinkName(""); setNewDrinkPrice("");
   };
-
   const createSession = async () => {
     const hasFood = restaurantName && menuItems.length > 0;
     const hasDrink = drinkName && drinkItems.length > 0;
-
-    // 至少要有餐廳或飲料店其中一個
     if (!hasFood && !hasDrink) {
       showToast("請至少選擇一個餐廳或飲料店");
       return;
     }
-    // 如果填了餐廳名稱但沒有品項
     if (restaurantName && menuItems.length === 0) {
       showToast("已選餐廳，請至少加入一個餐點品項");
       return;
     }
-    // 如果填了飲料店但沒有品項
     if (drinkName && drinkItems.length === 0) {
       showToast("已選飲料店，請至少加入一個飲料品項");
       return;
     }
-
     setCreating(true);
     try {
+      // ── 關鍵修改：存 ID，讓 OrderPage 即時查菜單 ──
+      const isManualFood = !selectedFoodId || selectedFoodId === "__manual__";
+      const isManualDrink = !selectedDrinkId || selectedDrinkId === "__manual__";
       const ref = await addDoc(collection(db, "sessions"), {
         date,
         restaurantName: restaurantName || "",
+        restaurantId: isManualFood ? null : selectedFoodId,
         restaurantPhone: selectedFoodInfo.phone || "",
         restaurantAddress: selectedFoodInfo.address || "",
         restaurantNote: selectedFoodInfo.deliveryNote || "",
         drinkName: drinkName || "",
+        drinkStoreId: isManualDrink ? null : selectedDrinkId,
         drinkPhone: selectedDrinkInfo.phone || "",
         drinkAddress: selectedDrinkInfo.address || "",
         drinkNote: selectedDrinkInfo.deliveryNote || "",
-        menuItems: restaurantName ? menuItems : [],
-        drinkItems: drinkName ? drinkItems : [],
+        // 手動輸入的才快照；從菜單庫選的存 null（OrderPage 即時查）
+        menuItems: isManualFood ? (restaurantName ? menuItems : []) : null,
+        drinkItems: isManualDrink ? (drinkName ? drinkItems : []) : null,
         status: "open",
         createdAt: serverTimestamp(),
       });
@@ -299,26 +305,21 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     } catch (e) { showToast("建立失敗，請重試"); }
     setCreating(false);
   };
-
   const copyLink = () => { navigator.clipboard.writeText(shareLink); showToast("🔗 連結已複製！"); };
-
   const togglePaid = async (orderId, current) => {
     await updateDoc(doc(db, "sessions", sessionId, "orders", orderId), { paid: !current });
   };
-
   const deleteOrder = async (orderId, userName) => {
     if (!window.confirm(`確定要刪除「${userName || "匿名"}」的訂單嗎？`)) return;
     await deleteDoc(doc(db, "sessions", sessionId, "orders", orderId));
     showToast("🗑️ 訂單已刪除");
   };
-
   const saveEditedOrder = async (updatedFields) => {
     if (!editingOrder) return;
     await updateDoc(doc(db, "sessions", sessionId, "orders", editingOrder.id), updatedFields);
     setEditingOrder(null);
     showToast("✅ 訂單已更新！");
   };
-
   const getSummary = () => {
     const foodMap = {}, drinkMap = {};
     let foodTotal = 0, drinkTotal = 0;
@@ -338,10 +339,16 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     });
     return { food: Object.values(foodMap), drinks: Object.values(drinkMap), foodTotal, drinkTotal, total: foodTotal + drinkTotal };
   };
-
   const summary = session ? getSummary() : null;
   const foodRestaurants = allRestaurants.filter(r => r.type === "food");
   const drinkRestaurants = allRestaurants.filter(r => r.type === "drink");
+
+  // EditOrderModal 收到的 session 要用即時菜單取代快照
+  const sessionForModal = session ? {
+    ...session,
+    menuItems: liveMenuItems,
+    drinkItems: liveDrinkItems,
+  } : null;
 
   // ========== SETUP ==========
   if (tab === "setup" || !sessionId) {
@@ -352,7 +359,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           <h1>建立今日訂單</h1>
           <button className="btn btn-secondary btn-sm" onClick={() => navigate("menumanager")}>📋 菜單庫</button>
         </div>
-
         <div className="card">
           <div className="card-title">基本資訊</div>
           <div className="field">
@@ -360,8 +366,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
         </div>
-
-        {/* ── 餐廳（選填）── */}
         <div className="card">
           <div className="card-title">選擇餐廳 <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text3)" }}>（選填）</span></div>
           {foodRestaurants.length > 0 ? (
@@ -406,8 +410,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
         </div>
-
-        {/* ── 飲料店（選填）── */}
         <div className="card">
           <div className="card-title">選擇飲料店 <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text3)" }}>（選填）</span></div>
           {drinkRestaurants.length > 0 ? (
@@ -452,7 +454,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
             </div>
           )}
         </div>
-
         <button className="btn btn-primary" onClick={createSession} disabled={creating}>
           {creating ? "建立中..." : "🚀 產生點餐連結"}
         </button>
@@ -460,7 +461,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       </div>
     );
   }
-
   // ========== MANAGE ==========
   return (
     <div className="page-wide">
@@ -477,7 +477,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         <button className={`tab-btn ${tab === "summary" ? "active" : ""}`} onClick={() => setTab("summary")}>🛒 匯整點餐</button>
         <button className={`tab-btn ${tab === "share" ? "active" : ""}`} onClick={() => setTab("share")}>🔗 分享連結</button>
       </div>
-
       {tab === "share" && (
         <div>
           <div className="card">
@@ -493,7 +492,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           </div>
         </div>
       )}
-
       {tab === "manage" && (
         <div>
           {orders.length === 0 ? (
@@ -560,7 +558,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           )}
         </div>
       )}
-
       {tab === "summary" && (
         <div>
           {session?.restaurantName && (
@@ -606,7 +603,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               }
             </div>
           )}
-
           {session?.drinkName && (
             <div className="card">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -670,7 +666,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               )}
             </div>
           )}
-
           <div className="card" style={{ background: "var(--bg2)" }}>
             {session?.restaurantName && (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginBottom: 8 }}>
@@ -698,17 +693,15 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
           </div>
         </div>
       )}
-
       {editingOrder && (
         <EditOrderModal
           order={editingOrder}
-          session={session}
+          session={sessionForModal}
           drinkExcluded={drinkExcluded}
           onSave={saveEditedOrder}
           onClose={() => setEditingOrder(null)}
         />
       )}
-
       <Toast msg={toast} />
     </div>
   );
