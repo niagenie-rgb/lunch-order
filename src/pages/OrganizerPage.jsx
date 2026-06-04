@@ -223,59 +223,57 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  // ── 新增：同步最新菜單到 session ──
   const syncMenuFromLibrary = async () => {
-  if (!session) return;
-  const update = {};
-  let changed = false;
-  setSyncing(true);
-
-  try {
-    // 有 restaurantId → 直接查
-    if (session.restaurantId) {
-      const rSnap = await getDoc(doc(db, "restaurants", session.restaurantId));
-      if (rSnap.exists()) { update.menuItems = rSnap.data().items || []; changed = true; }
-    }
-    // 沒有 ID 但有餐廳名稱 → 用名稱比對
-    else if (session.restaurantName) {
-      const snap = await getDocs(collection(db, "restaurants"));
-      const match = snap.docs.find(d => d.data().name === session.restaurantName);
-      if (match) {
-        update.menuItems = match.data().items || [];
-        update.restaurantId = match.id; // 順便補上 ID，下次就走快速路徑
-        changed = true;
+    if (!session) return;
+    const update = {};
+    let changed = false;
+    setSyncing(true);
+    try {
+      if (session.restaurantId) {
+        const rSnap = await getDoc(doc(db, "restaurants", session.restaurantId));
+        if (rSnap.exists()) { update.menuItems = rSnap.data().items || []; changed = true; }
+      } else if (session.restaurantName) {
+        const snap = await getDocs(collection(db, "restaurants"));
+        const match = snap.docs.find(d => d.data().name === session.restaurantName);
+        if (match) {
+          update.menuItems = match.data().items || [];
+          update.restaurantId = match.id;
+          changed = true;
+        }
       }
-    }
-
-    // 有 drinkStoreId → 直接查
-    if (session.drinkStoreId) {
-      const dSnap = await getDoc(doc(db, "restaurants", session.drinkStoreId));
-      if (dSnap.exists()) { update.drinkItems = dSnap.data().items || []; changed = true; }
-    }
-    // 沒有 ID 但有飲料店名稱 → 用名稱比對
-    else if (session.drinkName) {
-      const snap = await getDocs(collection(db, "restaurants"));
-      const match = snap.docs.find(d => d.data().name === session.drinkName);
-      if (match) {
-        update.drinkItems = match.data().items || [];
-        update.drinkStoreId = match.id; // 順便補上 ID
-        changed = true;
+      if (session.drinkStoreId) {
+        const dSnap = await getDoc(doc(db, "restaurants", session.drinkStoreId));
+        if (dSnap.exists()) { update.drinkItems = dSnap.data().items || []; changed = true; }
+      } else if (session.drinkName) {
+        const snap = await getDocs(collection(db, "restaurants"));
+        const match = snap.docs.find(d => d.data().name === session.drinkName);
+        if (match) {
+          update.drinkItems = match.data().items || [];
+          update.drinkStoreId = match.id;
+          changed = true;
+        }
       }
+      if (!changed) { showToast("找不到對應的菜單庫資料"); setSyncing(false); return; }
+      await updateDoc(doc(db, "sessions", sessionId), update);
+      showToast("✅ 菜單已同步最新版本！");
+    } catch (e) {
+      showToast("同步失敗，請重試");
     }
+    setSyncing(false);
+  };
 
-    if (!changed) {
-      showToast("找不到對應的菜單庫資料");
-      setSyncing(false);
-      return;
+  // ✅ 修正：補上 onSelectFood 函式
+  const onSelectFood = (id) => {
+    setSelectedFoodId(id);
+    if (!id || id === "__manual__") { setRestaurantName(""); setMenuItems([]); return; }
+    const r = allRestaurants.find(r => r.id === id);
+    if (r) {
+      setRestaurantName(r.name);
+      setMenuItems(r.items || []);
+      setSelectedFoodInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
+  };
 
-    await updateDoc(doc(db, "sessions", sessionId), update);
-    showToast("✅ 菜單已同步最新版本！");
-  } catch (e) {
-    showToast("同步失敗，請重試");
-  }
-  setSyncing(false);
-};
   const onSelectDrink = (id) => {
     setSelectedDrinkId(id);
     if (!id || id === "__manual__") { setDrinkName(""); setDrinkItems([]); return; }
@@ -286,6 +284,7 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       setSelectedDrinkInfo({ phone: r.phone || "", address: r.address || "", deliveryNote: r.deliveryNote || "" });
     }
   };
+
   const addMenuItem = () => {
     if (!newItemName || !newItemPrice) return;
     setMenuItems([...menuItems, { name: newItemName, price: Number(newItemPrice) }]);
@@ -381,7 +380,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     drinkItems: liveDrinkItems,
   } : null;
 
-  // ========== SETUP ==========
   if (tab === "setup" || !sessionId) {
     return (
       <div className="page">
@@ -492,7 +490,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       </div>
     );
   }
-  // ========== MANAGE ==========
   return (
     <div className="page-wide">
       <div className="top-bar">
@@ -518,7 +515,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               <button className="btn btn-secondary btn-sm" onClick={copyLink}>複製</button>
             </div>
           </div>
-          {/* ── 新增：同步菜單按鈕 ── */}
           <div className="card" style={{ border: "1.5px solid var(--border)" }}>
             <div className="card-title">🔄 同步最新菜單</div>
             <p style={{ fontSize: 13, color: "var(--text2)", marginBottom: 12 }}>
