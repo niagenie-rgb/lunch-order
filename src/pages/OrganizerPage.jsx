@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   collection, addDoc, doc, onSnapshot,
-  updateDoc, deleteDoc, serverTimestamp, getDocs
+  updateDoc, deleteDoc, serverTimestamp, getDocs, getDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
 function Toast({ msg }) {
@@ -179,10 +179,9 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const [shareLink, setShareLink] = useState("");
   const [drinkExcluded, setDrinkExcluded] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
-
-  // ── 新增：即時菜單 state（給 EditOrderModal 用）──
   const [liveMenuItems, setLiveMenuItems] = useState([]);
   const [liveDrinkItems, setLiveDrinkItems] = useState([]);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     getDocs(collection(db, "restaurants")).then(snap => {
@@ -200,20 +199,16 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() };
         setSession(data);
-
-        // ── 新增：當 session 載入後，即時從菜單庫讀取最新菜單 ──
         if (data.restaurantId) {
-          getDocs(collection(db, "restaurants")).then(rSnap => {
-            const r = rSnap.docs.find(d => d.id === data.restaurantId);
-            if (r) setLiveMenuItems(r.data().items || []);
+          getDoc(doc(db, "restaurants", data.restaurantId)).then(rSnap => {
+            if (rSnap.exists()) setLiveMenuItems(rSnap.data().items || []);
           });
         } else {
           setLiveMenuItems(data.menuItems || []);
         }
         if (data.drinkStoreId) {
-          getDocs(collection(db, "restaurants")).then(rSnap => {
-            const r = rSnap.docs.find(d => d.id === data.drinkStoreId);
-            if (r) setLiveDrinkItems(r.data().items || []);
+          getDoc(doc(db, "restaurants", data.drinkStoreId)).then(dSnap => {
+            if (dSnap.exists()) setLiveDrinkItems(dSnap.data().items || []);
           });
         } else {
           setLiveDrinkItems(data.drinkItems || []);
@@ -227,6 +222,45 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   }, [sessionId]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+
+  // ── 新增：同步最新菜單到 session ──
+  const syncMenuFromLibrary = async () => {
+    if (!session) return;
+    const update = {};
+    let changed = false;
+
+    // 有 restaurantId → 從菜單庫讀最新
+    if (session.restaurantId) {
+      const rSnap = await getDoc(doc(db, "restaurants", session.restaurantId));
+      if (rSnap.exists()) {
+        update.menuItems = rSnap.data().items || [];
+        changed = true;
+      }
+    }
+    // 有 drinkStoreId → 從菜單庫讀最新
+    if (session.drinkStoreId) {
+      const dSnap = await getDoc(doc(db, "restaurants", session.drinkStoreId));
+      if (dSnap.exists()) {
+        update.drinkItems = dSnap.data().items || [];
+        changed = true;
+      }
+    }
+    // 沒有任何 ID（純手動輸入的 session）→ 無法同步
+    if (!changed) {
+      showToast("此訂單為手動輸入，無法從菜單庫同步");
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      await updateDoc(doc(db, "sessions", sessionId), update);
+      showToast("✅ 菜單已同步最新版本！");
+    } catch (e) {
+      showToast("同步失敗，請重試");
+    }
+    setSyncing(false);
+  };
+
   const onSelectFood = (id) => {
     setSelectedFoodId(id);
     if (!id || id === "__manual__") {
@@ -278,7 +312,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     }
     setCreating(true);
     try {
-      // ── 關鍵修改：存 ID，讓 OrderPage 即時查菜單 ──
       const isManualFood = !selectedFoodId || selectedFoodId === "__manual__";
       const isManualDrink = !selectedDrinkId || selectedDrinkId === "__manual__";
       const ref = await addDoc(collection(db, "sessions"), {
@@ -293,7 +326,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
         drinkPhone: selectedDrinkInfo.phone || "",
         drinkAddress: selectedDrinkInfo.address || "",
         drinkNote: selectedDrinkInfo.deliveryNote || "",
-        // 手動輸入的才快照；從菜單庫選的存 null（OrderPage 即時查）
         menuItems: isManualFood ? (restaurantName ? menuItems : []) : null,
         drinkItems: isManualDrink ? (drinkName ? drinkItems : []) : null,
         status: "open",
@@ -342,8 +374,6 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
   const summary = session ? getSummary() : null;
   const foodRestaurants = allRestaurants.filter(r => r.type === "food");
   const drinkRestaurants = allRestaurants.filter(r => r.type === "drink");
-
-  // EditOrderModal 收到的 session 要用即時菜單取代快照
   const sessionForModal = session ? {
     ...session,
     menuItems: liveMenuItems,
@@ -486,6 +516,26 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               <span>{shareLink}</span>
               <button className="btn btn-secondary btn-sm" onClick={copyLink}>複製</button>
             </div>
+          </div>
+          {/* ── 新增：同步菜單按鈕 ── */}
+          <div className="card" style={{ border: "1.5px solid var(--border)" }}>
+            <div className="card-title">🔄 同步最新菜單</div>
+            <p style={{ fontSize: 13, color: "var(--text2)", marginBottom: 12 }}>
+              若發現菜單庫的價格或品項有誤並已修正，按下方按鈕可將最新菜單同步至此訂單，同事重新整理頁面後即可看到更新。
+            </p>
+            <button
+              onClick={syncMenuFromLibrary}
+              disabled={syncing}
+              style={{
+                width: "100%", padding: "13px",
+                background: syncing ? "var(--bg2)" : "var(--accent)",
+                color: syncing ? "var(--text3)" : "white",
+                border: "none", borderRadius: "var(--radius-sm)",
+                fontSize: 15, fontWeight: 700, cursor: syncing ? "not-allowed" : "pointer",
+                transition: "all 0.15s"
+              }}>
+              {syncing ? "同步中..." : "🔄 立即同步菜單"}
+            </button>
           </div>
           <div className="card" style={{ background: "var(--amber-bg)", border: "1.5px solid #F0C060" }}>
             <p style={{ fontSize: 13, color: "var(--amber)" }}>💡 也可以截圖或在群組貼上連結</p>
