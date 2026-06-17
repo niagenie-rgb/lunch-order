@@ -167,7 +167,10 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
         });
         setDrinkSelections(drink);
         setDrinkOptions(dOpts);
-        setStep("food");
+        // 只在初次載入既有訂單時跳到菜單頁；
+        // 若已經送出（done）或正在其他步驟，不要覆蓋目前畫面，
+        // 否則送出後 setUserId 觸發本 effect 會把確認頁(done)打回菜單頁。
+        setStep(prev => (prev === "name" ? "food" : prev));
       }
     })();
   }, [sessionId, userId]);
