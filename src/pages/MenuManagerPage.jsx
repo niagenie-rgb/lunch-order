@@ -70,6 +70,23 @@ export default function MenuManagerPage({ navigate }) {
         }
       }
       if (allRows.length === 0) { showToast("找不到有效資料，請確認 Excel 格式", "error"); setImporting(false); return; }
+      // 解析選項欄位：格式「群組名:選項A|選項B+5;群組名2:...」，+N/-N 代表加價
+      const parseOptionGroups = (raw) => {
+        const txt = String(raw || "").trim();
+        if (!txt) return [];
+        return txt.split(";").map(g => g.trim()).filter(Boolean).map(g => {
+          const idx = g.indexOf(":");
+          if (idx < 0) return null;
+          const gname = g.slice(0, idx).trim();
+          const choices = g.slice(idx + 1).split("|").map(c => c.trim()).filter(Boolean).map(c => {
+            const m = c.match(/^(.*?)([+-]\d+)?$/);
+            const label = (m?.[1] || c).trim();
+            const price = m?.[2] ? Number(m[2]) : 0;
+            return { label, price };
+          });
+          return gname && choices.length ? { name: gname, choices } : null;
+        }).filter(Boolean);
+      };
       const storeMap = {};
       for (const row of allRows) {
         const name = String(row.store_name || "").trim();
@@ -98,6 +115,9 @@ export default function MenuManagerPage({ navigate }) {
             if (temperature) itemObj.temperature = temperature;
             if (iceOptions) itemObj.iceOptions = iceOptions;
             if (sugarOptions) itemObj.sugarOptions = sugarOptions;
+          } else {
+            const optionGroups = parseOptionGroups(row.options);
+            if (optionGroups.length) itemObj.optionGroups = optionGroups;
           }
           storeMap[name].items.push(itemObj);
         }

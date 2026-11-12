@@ -7,6 +7,11 @@ import { db } from "../firebase";
 function Toast({ msg }) {
   return msg ? <div className="toast">{msg}</div> : null;
 }
+// 餐點選項：用來區分同品名不同選項（如 飯 / 烏龍）的訂單
+const itemSig = (item) =>
+  item.name + "|" + ((item.options || []).map(o => `${o.group}:${o.label}`).join(","));
+const optionsLabel = (item) =>
+  (item.options || []).map(o => `${o.group}：${o.label}`).join("　");
 function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
   const parseOptions = (val) => {
     if (!val) return [];
@@ -16,7 +21,12 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
   const initFood = () =>
     (session?.menuItems || []).map(mi => {
       const existing = (order.foodItems || []).find(f => f.name === mi.name);
-      return { name: mi.name, price: Number(mi.price) || 0, qty: existing?.qty || 0 };
+      return {
+        name: mi.name,
+        price: Number(existing?.price ?? mi.price) || 0,
+        qty: existing?.qty || 0,
+        options: existing?.options || undefined,
+      };
     });
   const initDrink = () =>
     (session?.drinkItems || []).map(di => {
@@ -47,7 +57,9 @@ function EditOrderModal({ order, session, drinkExcluded, onSave, onClose }) {
     setDrinkItems(prev => prev.map((d, i) => i === idx ? { ...d, [key]: val } : d));
   };
   const handleSave = () => {
-    const newFood = foodItems.filter(f => f.qty > 0).map(({ name, price, qty }) => ({ name, price, qty }));
+    const newFood = foodItems.filter(f => f.qty > 0).map(({ name, price, qty, options }) => (
+      options && options.length ? { name, price, qty, options } : { name, price, qty }
+    ));
     const newDrink = drinkItems.filter(d => d.qty > 0).map(({ name, price, qty, sugar, ice }) => ({ name, price, qty, sugar, ice }));
     onSave({ foodItems: newFood, drinkItems: newDrink, note });
   };
@@ -357,8 +369,9 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
     let foodTotal = 0, drinkTotal = 0;
     orders.forEach(o => {
       (o.foodItems || []).forEach(item => {
-        if (!foodMap[item.name]) foodMap[item.name] = { name: item.name, price: item.price, qty: 0 };
-        foodMap[item.name].qty += item.qty;
+        const k = itemSig(item);
+        if (!foodMap[k]) foodMap[k] = { name: item.name, price: item.price, qty: 0, options: item.options || [] };
+        foodMap[k].qty += item.qty;
         foodTotal += item.price * item.qty;
       });
       if (!drinkExcluded) {
@@ -620,17 +633,20 @@ export default function OrganizerPage({ navigate, sessionId, setSessionId }) {
               {summary?.food.length === 0
                 ? <p style={{ color: "var(--text3)", fontSize: 14 }}>尚無餐點訂單</p>
                 : summary?.food.map((item, i) => {
-                  const orderers = orders.filter(o =>
-                    (o.foodItems || []).some(fi => fi.name === item.name)
-                  ).map(o => ({
-                    name: o.userName,
-                    qty: (o.foodItems || []).find(fi => fi.name === item.name)?.qty || 0,
-                    note: o.note
-                  }));
+                  const sig = itemSig(item);
+                  const orderers = [];
+                  orders.forEach(o => {
+                    (o.foodItems || []).forEach(fi => {
+                      if (itemSig(fi) === sig) orderers.push({ name: o.userName, qty: fi.qty, note: o.note });
+                    });
+                  });
                   return (
                     <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontWeight: 600 }}>{item.name}</span>
+                        <span style={{ fontWeight: 600 }}>
+                          {item.name}
+                          {optionsLabel(item) && <span style={{ fontSize: 12, color: "var(--text2)", fontWeight: 400, marginLeft: 6 }}>（{optionsLabel(item)}）</span>}
+                        </span>
                         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                           <span className="badge badge-gray">× {item.qty}</span>
                           <span style={{ color: "var(--accent)", fontWeight: 600, minWidth: 60, textAlign: "right" }}>$ {item.price * item.qty}</span>

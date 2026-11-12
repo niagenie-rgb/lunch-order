@@ -103,6 +103,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   const [foodSelections, setFoodSelections] = useState({});
   const [drinkSelections, setDrinkSelections] = useState({});
   const [drinkOptions, setDrinkOptions] = useState({});
+  const [foodOptions, setFoodOptions] = useState({});
   const [note, setNote] = useState("");
   const [toast, setToast] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -157,8 +158,15 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
         setUserName(existing.userName || "");
         setNote(existing.note || "");
         const food = {};
-        (existing.foodItems || []).forEach(i => { food[i.name] = i.qty; });
+        const fOpts = {};
+        (existing.foodItems || []).forEach(i => {
+          food[i.name] = i.qty;
+          if (i.options && i.options.length) {
+            fOpts[i.name] = Object.fromEntries(i.options.map(o => [o.group, o.label]));
+          }
+        });
         setFoodSelections(food);
+        setFoodOptions(fOpts);
         const drink = {};
         const dOpts = {};
         (existing.drinkItems || []).forEach(i => {
@@ -182,8 +190,22 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       const cur = prev[name] || 0;
       const next = Math.max(0, cur + delta);
       if (next === 0) { const copy = { ...prev }; delete copy[name]; return copy; }
+      if (cur === 0) {
+        const mi = session?.menuItems?.find(m => m.name === name);
+        const groups = mi?.optionGroups || [];
+        if (groups.length) {
+          setFoodOptions(opts => opts[name] ? opts : {
+            ...opts,
+            [name]: Object.fromEntries(groups.map(g => [g.name, g.choices?.[0]?.label]))
+          });
+        }
+      }
       return { ...prev, [name]: next };
     });
+  };
+
+  const setFoodOpt = (name, groupName, label) => {
+    setFoodOptions(prev => ({ ...prev, [name]: { ...(prev[name] || {}), [groupName]: label } }));
   };
 
   const setDrink = (name, delta) => {
@@ -201,11 +223,21 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
   };
 
   const getFoodItems = () => session
-    ? Object.entries(foodSelections).map(([name, qty]) => ({
-        name, qty,
-        price: session.menuItems.find(m => m.name === name)?.price || 0,
-        category: session.menuItems.find(m => m.name === name)?.category || "",
-      }))
+    ? Object.entries(foodSelections).map(([name, qty]) => {
+        const mi = session.menuItems.find(m => m.name === name);
+        const base = mi?.price || 0;
+        const groups = mi?.optionGroups || [];
+        const sel = foodOptions[name] || {};
+        const options = groups.map(g => {
+          const label = sel[g.name] ?? g.choices?.[0]?.label;
+          const choice = (g.choices || []).find(c => c.label === label) || g.choices?.[0];
+          return choice ? { group: g.name, label: choice.label, price: Number(choice.price) || 0 } : null;
+        }).filter(Boolean);
+        const addPrice = options.reduce((s, o) => s + o.price, 0);
+        const item = { name, qty, price: base + addPrice, basePrice: base, category: mi?.category || "" };
+        if (options.length) item.options = options;
+        return item;
+      })
     : [];
 
   const getDrinkItems = () => session
@@ -236,6 +268,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
 
   const resetForNextOrder = () => {
     setFoodSelections({});
+    setFoodOptions({});
     setDrinkSelections({});
     setDrinkOptions({});
     setNote("");
@@ -256,6 +289,7 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
       setExistingOrderId(null);
       setFinalOrder(null);
       setFoodSelections({});
+      setFoodOptions({});
       setDrinkSelections({});
       setDrinkOptions({});
       setNote("");
@@ -347,9 +381,16 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
                 🍱 {session.restaurantName}
               </div>
               {finalOrder.foodItems.map((item, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
-                  <span style={{ flex: 1 }}>{item.name} <span style={{ color: "var(--text3)" }}>× {item.qty}</span></span>
-                  <span style={{ fontWeight: 600 }}>$ {item.price * item.qty}</span>
+                <div key={i} style={{ padding: "7px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ flex: 1 }}>{item.name} <span style={{ color: "var(--text3)" }}>× {item.qty}</span></span>
+                    <span style={{ fontWeight: 600 }}>$ {item.price * item.qty}</span>
+                  </div>
+                  {item.options && item.options.length > 0 && (
+                    <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                      {item.options.map(o => `${o.group}：${o.label}`).join("　")}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -448,17 +489,56 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
 
     const MenuItemRow = ({ item }) => {
       const qty = foodSelections[item.name] || 0;
+      const groups = item.optionGroups || [];
+      const sel = foodOptions[item.name] || {};
+      const addPrice = groups.reduce((s, g) => {
+        const label = sel[g.name] ?? g.choices?.[0]?.label;
+        const c = (g.choices || []).find(x => x.label === label);
+        return s + (c ? Number(c.price) || 0 : 0);
+      }, 0);
+      const unit = item.price + addPrice;
       return (
-        <div className={`menu-item ${qty > 0 ? "selected" : ""}`}>
-          <div className="menu-item-info">
-            <div className="menu-item-name">{item.name}</div>
-            <div className="menu-item-price">$ {item.price}</div>
+        <div className={`menu-item ${qty > 0 ? "selected" : ""}`} style={{ flexDirection: "column", alignItems: "stretch" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="menu-item-info" style={{ flex: 1 }}>
+              <div className="menu-item-name">{item.name}</div>
+              <div className="menu-item-price">
+                $ {unit}
+                {addPrice > 0 && <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 400 }}>（含加購 +{addPrice}）</span>}
+              </div>
+            </div>
+            <div className="qty-control">
+              <button onClick={() => setFood(item.name, -1)} disabled={qty === 0}>−</button>
+              <span className="qty-num">{qty}</span>
+              <button onClick={() => setFood(item.name, 1)}>+</button>
+            </div>
           </div>
-          <div className="qty-control">
-            <button onClick={() => setFood(item.name, -1)} disabled={qty === 0}>−</button>
-            <span className="qty-num">{qty}</span>
-            <button onClick={() => setFood(item.name, 1)}>+</button>
-          </div>
+          {qty > 0 && groups.length > 0 && (
+            <div style={{ marginTop: 12, borderTop: "1px solid var(--bg2)", paddingTop: 12 }}>
+              {groups.map((g, gi) => {
+                const current = sel[g.name] ?? g.choices?.[0]?.label;
+                return (
+                  <div key={gi} style={{ marginBottom: gi < groups.length - 1 ? 10 : 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>{g.name}</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(g.choices || []).map((c, ci) => {
+                        const active = current === c.label;
+                        return (
+                          <button key={ci} onClick={() => setFoodOpt(item.name, g.name, c.label)} style={{
+                            padding: "5px 12px", borderRadius: 20, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                            background: active ? "var(--accent)" : "var(--bg2)",
+                            color: active ? "white" : "var(--text2)",
+                            border: `1.5px solid ${active ? "var(--accent)" : "var(--border)"}`,
+                            fontWeight: active ? 600 : 400
+                          }}>{c.label}{Number(c.price) > 0 ? ` +${Number(c.price)}` : ""}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     };
@@ -617,9 +697,16 @@ export default function OrderPage({ navigate, sessionId, userId, setUserId }) {
             <>
               <div className="card-title">🍱 餐點</div>
               {foodItems.map((item, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
-                  <span style={{ flex: 1 }}>{item.name} × {item.qty}</span>
-                  <span style={{ fontWeight: 600 }}>$ {item.price * item.qty}</span>
+                <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--bg2)", fontSize: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ flex: 1 }}>{item.name} × {item.qty}</span>
+                    <span style={{ fontWeight: 600 }}>$ {item.price * item.qty}</span>
+                  </div>
+                  {item.options && item.options.length > 0 && (
+                    <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>
+                      {item.options.map(o => `${o.group}：${o.label}`).join("　")}
+                    </div>
+                  )}
                 </div>
               ))}
             </>
